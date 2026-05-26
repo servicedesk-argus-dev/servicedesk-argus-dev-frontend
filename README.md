@@ -1,4 +1,30 @@
-# React + TypeScript + Vite
+# Argus Service Desk Frontend
+
+React + TypeScript + Vite frontend for Argus Service Desk.
+
+## Environment
+
+Copy the example file for local development:
+
+```bash
+copy .env.example .env
+```
+
+Frontend env values are public and are bundled into the browser. Do not place Vault secrets, API tokens, passwords, or private keys in `VITE_*` variables.
+
+Allowed frontend config:
+
+```text
+VITE_API_BASE_URL
+VITE_KEYCLOAK_URL
+VITE_KEYCLOAK_REALM
+VITE_KEYCLOAK_CLIENT_ID
+VITE_KEYCLOAK_FORCE_LOGIN
+```
+
+Private secrets belong only in the backend deployment/Vault.
+
+## Vite Notes
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
