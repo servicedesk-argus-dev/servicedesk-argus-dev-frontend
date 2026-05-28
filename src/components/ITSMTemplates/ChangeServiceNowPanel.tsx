@@ -75,6 +75,12 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   closure_code: 'Closure code',
 };
 
+const INCIDENT_CHANGE_RELATIONSHIP_LABELS: Record<string, string> = {
+  RELATED_CHANGE: 'Related incident',
+  FIXED_BY_CHANGE: 'Change fixes incident',
+  CAUSED_BY_CHANGE: 'Change caused incident',
+};
+
 export default function ChangeServiceNowPanel({
   change,
   updateChange,
@@ -149,7 +155,9 @@ export default function ChangeServiceNowPanel({
     staleTime: 60000,
   });
   const assignmentTeams = orderedAssignmentTeams(extractAssignmentList(teamsData) as AssignmentRosterTeam[]);
-  const assignableUsers = assignableUsersForTeam(assignmentTeams, assignmentGroupId, change.assignedTo);
+  const assignableUsers = assignableUsersForTeam(assignmentTeams, assignmentGroupId, {
+    currentAssigned: change.assignedTo as any,
+  });
 
   const stateOptions = Object.keys(CHANGE_STATE_LABELS);
   const approvals = Array.isArray(change.approvals) ? change.approvals : [];
@@ -579,7 +587,7 @@ export default function ChangeServiceNowPanel({
                 {linkedIncidents.map((item: any, index: number) => (
                   <tr key={item.id || index}>
                     <td>{item.incident?.number || item.number || '-'}</td>
-                    <td>{item.linkType || 'Related'}</td>
+                    <td>{INCIDENT_CHANGE_RELATIONSHIP_LABELS[item.linkType] || item.linkType || 'Related incident'}</td>
                     <td>{item.incident?.state || item.state || '-'}</td>
                     <td>{item.incident?.shortDescription || item.shortDescription || '-'}</td>
                   </tr>

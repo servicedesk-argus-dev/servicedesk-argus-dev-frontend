@@ -31,7 +31,7 @@ export type NotificationType = 'INCIDENT' | 'CHANGE' | 'PROBLEM' | 'ALERT' | 'SL
 export type NotificationChannel = 'WEB' | 'EMAIL' | 'SMS' | 'SLACK' | 'VOICE';
 export type IntegrationType = 'SLACK' | 'SERVICENOW' | 'PROMETHEUS' | 'GRAFANA' | 'LOKI' | 'EMAIL' | 'TWILIO' | 'MSG91' | 'KALEYRA' | 'WEBHOOK' | 'N8N';
 export type IntegrationStatus = 'ACTIVE' | 'INACTIVE' | 'ERROR';
-export type LinkType = 'CAUSED_BY' | 'RESOLVED_BY' | 'RELATED';
+export type LinkType = 'RELATED_CHANGE' | 'FIXED_BY_CHANGE' | 'CAUSED_BY_CHANGE';
 export type ProblemLinkType = 'CAUSED_BY' | 'RELATED' | 'SYMPTOM_OF';
 
 // ── Core Interfaces ──

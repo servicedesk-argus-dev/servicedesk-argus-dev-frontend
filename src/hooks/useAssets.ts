@@ -109,7 +109,7 @@ function buildAssetParams(filters: FilterParams) {
   return params;
 }
 
-export function useAssets(filters: FilterParams = {}) {
+export function useAssets(filters: FilterParams = {}, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['assets', 'list', filters],
     queryFn: async () => {
@@ -118,6 +118,7 @@ export function useAssets(filters: FilterParams = {}) {
       return normalizeAssetResponse(data);
     },
     staleTime: 30000,
+    enabled: options.enabled ?? true,
   });
 }
 

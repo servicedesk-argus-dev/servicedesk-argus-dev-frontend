@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
 
+type FilterParams = Record<string, string | number | boolean | undefined>;
+
 export interface Site {
   id: string;
   organization?: { id: string; name: string; slug?: string };
@@ -34,6 +36,16 @@ export interface Site {
 }
 
 const SITE_ENDPOINT = '/assets/sites/';
+
+function buildSiteParams(filters: FilterParams) {
+  const params = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value != null && value !== '') {
+      params.append(key === 'pageSize' ? 'limit' : key, String(value));
+    }
+  });
+  return params;
+}
 
 function normalizeSite(site: any): Site {
   const status = site?.status || 'ACTIVE';
@@ -106,11 +118,16 @@ function denormalizeSite(input: Record<string, unknown>) {
   return output;
 }
 
-export function useSites() {
+export function useSites(filters: FilterParams = {}, options: { enabled?: boolean } = {}) {
   return useQuery({
-    queryKey: ['sites', 'list'],
-    queryFn: async () => { const { data } = await api.get(SITE_ENDPOINT); return normalizeSitePayload(data); },
+    queryKey: ['sites', 'list', filters],
+    queryFn: async () => {
+      const params = buildSiteParams(filters);
+      const { data } = await api.get(`${SITE_ENDPOINT}${params.toString() ? `?${params}` : ''}`);
+      return normalizeSitePayload(data);
+    },
     staleTime: 60000,
+    enabled: options.enabled ?? true,
   });
 }
 

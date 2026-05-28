@@ -72,7 +72,6 @@ export default function IncidentDetail() {
         stateMetaLabel={STATE_LABEL[incident.state] ?? incident.state}
         incTransitions={transitions}
         updateIncident={updateIncident}
-        onOpenLinkProblem={() => navigate('/problems/create', { state: { incidentId: id } })}
       />
     </SNPage>
   );

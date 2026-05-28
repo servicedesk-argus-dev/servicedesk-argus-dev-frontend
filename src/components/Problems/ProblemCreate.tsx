@@ -77,14 +77,24 @@ export default function ProblemCreate() {
   const { user: currentUser, isClient } = useAuth();
 
   const { data: teamsData } = useQuery({
-    queryKey: ['teams'],
-    queryFn: async () => { const { data } = await api.get('/teams/'); return data; },
+    queryKey: ['teams', 'problem-create-assignment', currentUser?.organizationId || 'all'],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: '200', is_active: 'true' });
+      if (currentUser?.organizationId) params.set('organization', currentUser.organizationId);
+      const { data } = await api.get(`/teams/?${params}`);
+      return data;
+    },
     staleTime: 60000,
     enabled: !isClient,
   });
   const { data: assetsData } = useQuery({
-    queryKey: ['assets'],
-    queryFn: async () => { const { data } = await api.get('/assets/'); return data; },
+    queryKey: ['assets', 'problem-create', currentUser?.organizationId || 'all'],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (currentUser?.organizationId) params.set('organization', currentUser.organizationId);
+      const { data } = await api.get(`/assets/${params.toString() ? `?${params}` : ''}`);
+      return data;
+    },
     staleTime: 60000,
     enabled: !isClient,
   });
@@ -118,7 +128,9 @@ export default function ProblemCreate() {
   const category = watch('category');
   const subcategory = watch('subcategory');
   const assignmentGroupId = watch('assignmentGroupId');
-  const teamMembers = assignableUsersForTeam(teams, assignmentGroupId);
+  const teamMembers = assignableUsersForTeam(teams, assignmentGroupId, {
+    organizationId: currentUser?.organizationId || null,
+  });
 
   const { data: suggestion } = useAssignmentPreview({ category }, !isClient);
 

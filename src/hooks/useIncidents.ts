@@ -24,6 +24,7 @@ const FIELD_TO_CAMEL: Record<string, string> = {
   work_notes: 'workNotes',
   linked_problems: 'linkedProblems',
   linked_changes: 'linkedChanges',
+  link_type: 'linkType',
   available_transitions: 'availableTransitions',
   is_assigned_to_me: 'isAssignedToMe',
   can_edit: 'canEdit',
@@ -307,6 +308,74 @@ export function useReopenIncident() {
     onSuccess: (_, v) => {
       qc.invalidateQueries({ queryKey: keys.detail(v.id) });
       qc.invalidateQueries({ queryKey: keys.all });
+    },
+  });
+}
+
+export function useLinkIncidentProblem(incidentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { problemId: string; linkType: string; notes?: string }) => {
+      const { data } = await api.post(`/incidents/${incidentId}/problems/`, {
+        problem_id: input.problemId,
+        link_type: input.linkType,
+        notes: input.notes || undefined,
+      });
+      return { ...data, data: normalizePayload(data?.data) };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.detail(incidentId) });
+      qc.invalidateQueries({ queryKey: keys.all });
+      qc.invalidateQueries({ queryKey: ['problems'] });
+    },
+  });
+}
+
+export function useLinkIncidentChange(incidentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { changeId: string; linkType: string; notes?: string }) => {
+      const { data } = await api.post(`/incidents/${incidentId}/changes/`, {
+        change_id: input.changeId,
+        link_type: input.linkType,
+        notes: input.notes || undefined,
+      });
+      return { ...data, data: normalizePayload(data?.data) };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.detail(incidentId) });
+      qc.invalidateQueries({ queryKey: keys.all });
+      qc.invalidateQueries({ queryKey: ['changes'] });
+    },
+  });
+}
+
+export function useUnlinkIncidentProblem(incidentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (linkId: string) => {
+      const { data } = await api.delete(`/incidents/${incidentId}/problems/${linkId}/`);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.detail(incidentId) });
+      qc.invalidateQueries({ queryKey: keys.all });
+      qc.invalidateQueries({ queryKey: ['problems'] });
+    },
+  });
+}
+
+export function useUnlinkIncidentChange(incidentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (linkId: string) => {
+      const { data } = await api.delete(`/incidents/${incidentId}/changes/${linkId}/`);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.detail(incidentId) });
+      qc.invalidateQueries({ queryKey: keys.all });
+      qc.invalidateQueries({ queryKey: ['changes'] });
     },
   });
 }

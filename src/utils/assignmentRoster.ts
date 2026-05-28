@@ -16,6 +16,9 @@ export type AssignmentRosterUser = {
   isActiveMember?: boolean;
   is_active_member?: boolean;
   disabled?: boolean;
+  organizationId?: string | null;
+  organization_id?: string | null;
+  organization?: { id?: string | null; name?: string } | null;
 };
 
 export type AssignmentRosterMember = { user?: AssignmentRosterUser | null } | AssignmentRosterUser;
@@ -71,6 +74,15 @@ function memberUser(member: AssignmentRosterMember): AssignmentRosterUser | null
   return member as AssignmentRosterUser;
 }
 
+function userOrganizationId(user: AssignmentRosterUser): string | null {
+  return user.organizationId || user.organization_id || user.organization?.id || null;
+}
+
+type AssignableUserOptions = {
+  currentAssigned?: AssignmentRosterUser | null;
+  organizationId?: string | null;
+};
+
 export function orderedAssignmentTeams(teams: AssignmentRosterTeam[]): AssignmentRosterTeam[] {
   return teams
     .filter((team) => team?.id && team?.name && team.isActive !== false && team.is_active !== false)
@@ -80,19 +92,34 @@ export function orderedAssignmentTeams(teams: AssignmentRosterTeam[]): Assignmen
 export function assignableUsersForTeam(
   teams: AssignmentRosterTeam[],
   assignmentGroupId: string,
-  currentAssigned?: AssignmentRosterUser | null,
+  options: AssignableUserOptions = {},
 ): AssignmentRosterUser[] {
   const selectedTeam = teams.find((team) => team.id === assignmentGroupId);
-  const users = (selectedTeam?.members || [])
+  const organizationId = options.organizationId || null;
+  const usersById = new Map<string, AssignmentRosterUser>();
+
+  (selectedTeam?.members || [])
     .map(memberUser)
     .filter(Boolean)
-    .filter((user) => isActiveUser(user as AssignmentRosterUser) && isResolverUser(user as AssignmentRosterUser)) as AssignmentRosterUser[];
+    .filter((user) => isActiveUser(user as AssignmentRosterUser) && isResolverUser(user as AssignmentRosterUser))
+    .forEach((user) => {
+      const candidate = user as AssignmentRosterUser;
+      if (organizationId && userOrganizationId(candidate) !== organizationId) {
+        return;
+      }
+      if (!candidate.id || usersById.has(candidate.id)) {
+        return;
+      }
+      usersById.set(candidate.id, candidate);
+    });
+
+  const users = Array.from(usersById.values());
 
   const seen = new Set(users.map((user) => user.id));
-  if (currentAssigned?.id && assignmentGroupId && !seen.has(currentAssigned.id)) {
+  if (options.currentAssigned?.id && assignmentGroupId && !seen.has(options.currentAssigned.id)) {
     users.push({
-      ...currentAssigned,
-      displayName: `${assignmentPersonLabel(currentAssigned)} (not in selected team)`,
+      ...options.currentAssigned,
+      displayName: `${assignmentPersonLabel(options.currentAssigned)} (not in selected team)`,
       disabled: true,
     });
   }

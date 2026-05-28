@@ -9,7 +9,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SNPage, SNRecordHeader, SNCollapsibleSection, SNFieldGrid, SNFormRow, SNPillBadge, SNReadOnly, SNProcessRibbon, SNRelatedList, SNEmptyRelatedList, sn, SNModal, SNLabel } from './ServiceNowUI';
 import { Upload, AlertCircle, CheckCircle2, ArrowUpCircle, XCircle, TrendingUp, Link2, Users, BarChart3, CheckSquare, Square } from 'lucide-react';
 import api from '../../lib/api';
-import { useResolveIncident, useReopenIncident, useCloseIncident, useEscalateIncident, usePromoteIncidentToProblem, useChildBulkOperations, useAddWorkNote } from '../../hooks/useIncidents';
+import {
+  useResolveIncident,
+  useReopenIncident,
+  useCloseIncident,
+  useEscalateIncident,
+  usePromoteIncidentToProblem,
+  useChildBulkOperations,
+  useAddWorkNote,
+  useLinkIncidentProblem,
+  useLinkIncidentChange,
+  useUnlinkIncidentProblem,
+  useUnlinkIncidentChange,
+} from '../../hooks/useIncidents';
 import { useAuth } from '../../hooks/useAuth';
 import type { Incident, Priority } from '../../types';
 import IncidentBreadcrumb from '../Incidents/IncidentBreadcrumb';
@@ -75,6 +87,13 @@ const RESOLUTION_CODES = [
 ];
 
 const SUBCAT_SUGGESTIONS = [
+  'Network',
+  'Database',
+  'Software',
+  'Hardware',
+  'Application',
+  'Infrastructure',
+  'Security',
   'PostgreSQL',
   'MySQL',
   'Oracle',
@@ -82,6 +101,27 @@ const SUBCAT_SUGGESTIONS = [
   'MongoDB',
   'Redis',
 ];
+
+const PROBLEM_LINK_TYPES = [
+  { value: 'RELATED', label: 'Related problem' },
+  { value: 'CAUSED_BY', label: 'Caused by problem' },
+  { value: 'SYMPTOM_OF', label: 'Symptom of problem' },
+];
+
+const CHANGE_LINK_TYPES = [
+  { value: 'RELATED_CHANGE', label: 'Related change' },
+  { value: 'FIXED_BY_CHANGE', label: 'Fixed by change' },
+  { value: 'CAUSED_BY_CHANGE', label: 'Caused by change' },
+];
+
+const RELATED_LABELS: Record<string, string> = {
+  RELATED: 'Related problem',
+  CAUSED_BY: 'Caused by problem',
+  SYMPTOM_OF: 'Symptom of problem',
+  RELATED_CHANGE: 'Related change',
+  FIXED_BY_CHANGE: 'Fixed by change',
+  CAUSED_BY_CHANGE: 'Caused by change',
+};
 
 function formatOpened(iso: string): string {
   const d = new Date(iso);
@@ -134,6 +174,13 @@ function formatPersonName(value: unknown): string {
   return label === 'Unassigned' ? '-' : label;
 }
 
+function extractRecordList(payload: any): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.results)) return payload.results;
+  return [];
+}
+
 export default function IncidentServiceNowPanel({
   incident,
   incidentId,
@@ -146,7 +193,6 @@ export default function IncidentServiceNowPanel({
   stateMetaLabel,
   incTransitions,
   updateIncident,
-  onOpenLinkProblem,
 }: {
   incident: Incident;
   incidentId: string;
@@ -162,7 +208,6 @@ export default function IncidentServiceNowPanel({
     mutateAsync: (args: { id: string; data: Record<string, unknown> }) => Promise<unknown>;
     isPending?: boolean;
   };
-  onOpenLinkProblem: () => void;
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -182,6 +227,10 @@ export default function IncidentServiceNowPanel({
   const promoteToProb = usePromoteIncidentToProblem();
   const childBulkOps = useChildBulkOperations();
   const addWorkNote = useAddWorkNote(incidentId);
+  const linkProblem = useLinkIncidentProblem(incidentId);
+  const linkChange = useLinkIncidentChange(incidentId);
+  const unlinkProblem = useUnlinkIncidentProblem(incidentId);
+  const unlinkChange = useUnlinkIncidentChange(incidentId);
   const [shortDescription, setShortDescription] = useState(incident.shortDescription || '');
   const [description, setDescription] = useState(incident.description || '');
   const [impact, setImpact] = useState(incident.impact);
@@ -209,6 +258,14 @@ export default function IncidentServiceNowPanel({
   const [assignmentGroupId, setAssignmentGroupId] = useState(incident.assignmentGroupId || incident.assignmentGroup?.id || '');
   const [assignedToId, setAssignedToId] = useState(incident.assignedToId || incident.assignedTo?.id || '');
   const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkMode, setLinkMode] = useState<'problem' | 'change'>('problem');
+  const [linkSearch, setLinkSearch] = useState('');
+  const [selectedProblemId, setSelectedProblemId] = useState('');
+  const [selectedChangeId, setSelectedChangeId] = useState('');
+  const [problemLinkType, setProblemLinkType] = useState('RELATED');
+  const [changeLinkType, setChangeLinkType] = useState('RELATED_CHANGE');
+  const [linkNotes, setLinkNotes] = useState('');
 
   const incidentOrganizationId = (incident as any).organizationId || (incident as any).organization?.id || '';
   const teamsQuery = useQuery({
@@ -221,6 +278,32 @@ export default function IncidentServiceNowPanel({
     },
     enabled: canAssign,
     staleTime: 60000,
+  });
+
+  const problemOptionsQuery = useQuery({
+    queryKey: ['incident-link-problems', incidentOrganizationId, linkSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: '50' });
+      if (linkSearch.trim()) params.set('search', linkSearch.trim());
+      if (incidentOrganizationId) params.set('organization', incidentOrganizationId);
+      const { data } = await api.get(`/problems/?${params}`);
+      return extractRecordList(data);
+    },
+    enabled: showLinkModal && linkMode === 'problem',
+    staleTime: 30000,
+  });
+
+  const changeOptionsQuery = useQuery({
+    queryKey: ['incident-link-changes', incidentOrganizationId, linkSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: '50' });
+      if (linkSearch.trim()) params.set('search', linkSearch.trim());
+      if (incidentOrganizationId) params.set('organization', incidentOrganizationId);
+      const { data } = await api.get(`/changes/?${params}`);
+      return extractRecordList(data);
+    },
+    enabled: showLinkModal && linkMode === 'change',
+    staleTime: 30000,
   });
 
   useEffect(() => {
@@ -239,16 +322,18 @@ export default function IncidentServiceNowPanel({
   }, [incident.id, incident.updatedAt, state]);
 
   const assignmentTeams = orderedAssignmentTeams(teamsQuery.data ?? []);
-  const assignableUsers = assignableUsersForTeam(assignmentTeams, assignmentGroupId, incident.assignedTo as any);
+  const assignableUsers = assignableUsersForTeam(assignmentTeams, assignmentGroupId, {
+    currentAssigned: incident.assignedTo as any,
+  });
 
   const isAssignmentChanged =
     assignmentGroupId !== (incident.assignmentGroupId || incident.assignmentGroup?.id || '')
     || assignedToId !== (incident.assignedToId || incident.assignedTo?.id || '');
 
-  const stateDropdownOptions = Object.keys(STATE_LABEL).map((value) => ({
+  const stateDropdownValues = Array.from(new Set([state, ...(incTransitions as string[])]));
+  const stateDropdownOptions = stateDropdownValues.map((value) => ({
     value: value as IncidentState,
     label: STATE_LABEL[value] || String(value).replace(/_/g, ' '),
-    isTransition: (incTransitions as string[]).includes(value)
   }));
 
   async function handleUpdate() {
@@ -316,6 +401,62 @@ export default function IncidentServiceNowPanel({
       toast.error(err.response?.data?.error || err.response?.data?.message || 'Assignment update failed');
     } finally {
       setAssignmentSaving(false);
+    }
+  }
+
+  function resetLinkModal() {
+    setSelectedProblemId('');
+    setSelectedChangeId('');
+    setProblemLinkType('RELATED');
+    setChangeLinkType('RELATED_CHANGE');
+    setLinkNotes('');
+    setLinkSearch('');
+  }
+
+  async function handleLinkRecord() {
+    try {
+      if (linkMode === 'problem') {
+        if (!selectedProblemId) {
+          toast.error('Select a problem to link');
+          return;
+        }
+        await linkProblem.mutateAsync({
+          problemId: selectedProblemId,
+          linkType: problemLinkType,
+          notes: linkNotes.trim() || undefined,
+        });
+        toast.success('Problem linked to incident');
+      } else {
+        if (!selectedChangeId) {
+          toast.error('Select a change to link');
+          return;
+        }
+        await linkChange.mutateAsync({
+          changeId: selectedChangeId,
+          linkType: changeLinkType,
+          notes: linkNotes.trim() || undefined,
+        });
+        toast.success('Change linked to incident');
+      }
+      resetLinkModal();
+      setShowLinkModal(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to link record');
+    }
+  }
+
+  async function handleUnlinkRecord(kind: 'problem' | 'change', linkId: string) {
+    const confirmed = window.confirm(`Unlink this ${kind} from ${incident.number}?`);
+    if (!confirmed) return;
+    try {
+      if (kind === 'problem') {
+        await unlinkProblem.mutateAsync(linkId);
+      } else {
+        await unlinkChange.mutateAsync(linkId);
+      }
+      toast.success(`${kind === 'problem' ? 'Problem' : 'Change'} unlinked`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Failed to unlink record');
     }
   }
 
@@ -429,7 +570,7 @@ export default function IncidentServiceNowPanel({
 
   async function handleBulkOperation() {
     if (selectedChildren.length === 0) {
-      toast.error('Please select at least one child incident');
+      toast.error('Please select at least one sub-incident');
       return;
     }
 
@@ -451,7 +592,7 @@ export default function IncidentServiceNowPanel({
         updates,
       });
 
-      toast.success(`Bulk ${bulkAction} completed for ${selectedChildren.length} child incidents`);
+      toast.success(`Bulk ${bulkAction} completed for ${selectedChildren.length} sub-incidents`);
       setShowBulkModal(false);
       setSelectedChildren([]);
       setBulkResolutionCode('');
@@ -485,7 +626,7 @@ export default function IncidentServiceNowPanel({
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
         <div className="flex items-center gap-2 mb-2">
           <BarChart3 size={16} className="text-blue-600" />
-          <span className="font-medium text-blue-900">Child Incidents Summary</span>
+          <span className="font-medium text-blue-900">Sub-Incident Summary</span>
         </div>
         <div className="grid grid-cols-4 gap-3 text-sm">
           <div className="text-center">
@@ -551,7 +692,7 @@ export default function IncidentServiceNowPanel({
         priorityPill={priorityBadge}
         statePill={stateBadge}
         onClone={canEditIncident ? handleClone : undefined}
-        onLink={canEditIncident ? onOpenLinkProblem : undefined}
+        onLink={canEditIncident ? () => setShowLinkModal(true) : undefined}
         onPrint={() => window.print()}
         onUpdate={canEditIncident ? handleUpdate : undefined}
         updateLoading={saving}
@@ -629,7 +770,7 @@ export default function IncidentServiceNowPanel({
             </SNFormRow>
 
 
-            <SNFormRow label="Parent Incident">
+            <SNFormRow label="Parent Case">
               {(incident as any).parent ? (
                 <button
                   type="button"
@@ -657,14 +798,17 @@ export default function IncidentServiceNowPanel({
             </SNFormRow>
 
             <SNFormRow label="Subcategory">
-              <select className="sn-field" value={subcategory} onChange={(e) => setSubcategory(e.target.value)} disabled={!canEditIncident}>
-                <option value="">-</option>
-                {SUBCAT_SUGGESTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+              <input
+                className="sn-field"
+                list="incident-subcategory-suggestions"
+                value={subcategory}
+                onChange={(e) => setSubcategory(e.target.value)}
+                placeholder="-"
+                disabled={!canEditIncident}
+              />
+              <datalist id="incident-subcategory-suggestions">
+                {SUBCAT_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+              </datalist>
             </SNFormRow>
             <SNFormRow label="Contact Type">
               <select className="sn-field" value={contactTypeFromSource(incident.source)} onChange={() => undefined} disabled={!canEditIncident}>
@@ -720,15 +864,8 @@ export default function IncidentServiceNowPanel({
             <SNFormRow label="State">
               <select className="sn-field" value={stateSel} onChange={(e) => setStateSel(e.target.value as IncidentState)} disabled={!canEditIncident}>
                 {stateDropdownOptions.map((o) => (
-                  <option 
-                    key={o.value} 
-                    value={o.value}
-                    style={{ 
-                      color: o.isTransition || o.value === state ? 'inherit' : '#999',
-                      fontWeight: o.isTransition || o.value === state ? 'normal' : 'normal'
-                    }}
-                  >
-                    {o.label} {!o.isTransition && o.value !== state ? '(Invalid)' : ''}
+                  <option key={o.value} value={o.value}>
+                    {o.label}
                   </option>
                 ))}
               </select>
@@ -912,31 +1049,73 @@ export default function IncidentServiceNowPanel({
                   <th>Number</th>
                   <th>Relationship</th>
                   <th>State</th>
+                  <th>Assignment group</th>
+                  <th>Assigned to</th>
+                  {canEditIncident && <th>Action</th>}
                 </tr>
               </thead>
               <tbody>
-                {linkedProblems.map((item: any, index: number) => (
-                  <tr key={`problem-${item.id || index}`}>
-                    <td>Problem</td>
-                    <td>{item.problem?.number || item.number || '-'}</td>
-                    <td>{item.linkType || 'Related'}</td>
-                    <td>{item.problem?.state || item.state || '-'}</td>
-                  </tr>
-                ))}
-                {linkedChanges.map((item: any, index: number) => (
-                  <tr key={`change-${item.id || index}`}>
-                    <td>Change</td>
-                    <td>{item.change?.number || item.number || '-'}</td>
-                    <td>{item.linkType || 'Related'}</td>
-                    <td>{item.change?.state || item.state || '-'}</td>
-                  </tr>
-                ))}
+                {linkedProblems.map((item: any, index: number) => {
+                  const problem = item.problem || item;
+                  return (
+                    <tr key={`problem-${item.id || index}`}>
+                      <td>Problem</td>
+                      <td>
+                        {problem.id ? (
+                          <button type="button" className="sn-list-link" onClick={() => navigate(`/problems/${problem.id}`)}>
+                            {problem.number || '-'}
+                          </button>
+                        ) : problem.number || '-'}
+                      </td>
+                      <td>{RELATED_LABELS[item.linkType] || item.linkType || 'Related problem'}</td>
+                      <td>{problem.state || '-'}</td>
+                      <td>{formatPersonName(problem.assignmentGroup)}</td>
+                      <td>{formatPersonName(problem.assignedTo)}</td>
+                      {canEditIncident && (
+                        <td>
+                          <button type="button" className="sn-soft-button" onClick={() => handleUnlinkRecord('problem', item.id)}>
+                            Unlink
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+                {linkedChanges.map((item: any, index: number) => {
+                  const change = item.change || item;
+                  return (
+                    <tr key={`change-${item.id || index}`}>
+                      <td>Change</td>
+                      <td>
+                        {change.id ? (
+                          <button type="button" className="sn-list-link" onClick={() => navigate(`/changes/${change.id}`)}>
+                            {change.number || '-'}
+                          </button>
+                        ) : change.number || '-'}
+                      </td>
+                      <td>{RELATED_LABELS[item.linkType] || item.linkType || 'Related change'}</td>
+                      <td>{change.state || '-'}</td>
+                      <td>{formatPersonName(change.assignmentGroup)}</td>
+                      <td>{formatPersonName(change.assignedTo)}</td>
+                      {canEditIncident && (
+                        <td>
+                          <button type="button" className="sn-soft-button" onClick={() => handleUnlinkRecord('change', item.id)}>
+                            Unlink
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
                 {relatedAlerts.map((item: any, index: number) => (
                   <tr key={`alert-${item.id || index}`}>
                     <td>Alert</td>
                     <td>{item.alertName || item.name || item.id || '-'}</td>
                     <td>Source event</td>
                     <td>{item.status || '-'}</td>
+                    <td>-</td>
+                    <td>-</td>
+                    {canEditIncident && <td>-</td>}
                   </tr>
                 ))}
               </tbody>
@@ -944,11 +1123,11 @@ export default function IncidentServiceNowPanel({
           )}
         </SNRelatedList>
 
-        <SNRelatedList title="Child Incidents" count={incident.childIncidents?.length || 0}>
+        <SNRelatedList title="Incident Hierarchy" count={incident.childIncidents?.length || 0}>
           <ChildStatusSummary summary={incident.childStatusSummary} />
           
           <div className="flex items-center justify-between p-3 border-b bg-slate-50">
-             <span className="text-xs text-slate-500">Sub-incidents linked to this parent</span>
+             <span className="text-xs text-slate-500">Sub-incidents linked to this case</span>
              <div className="flex items-center gap-2">
                {canEditIncident && incident.childIncidents && incident.childIncidents.length > 0 && (
                  <button 
@@ -968,7 +1147,7 @@ export default function IncidentServiceNowPanel({
                    onClick={() => navigate('/incidents/create', { 
                      state: { 
                        clone: { 
-                         shortDescription: `Child of ${incident.number}: ${incident.shortDescription}`,
+                         shortDescription: `Sub-incident of ${incident.number}: ${incident.shortDescription}`,
                          category: incident.category,
                          impact: incident.impact,
                          urgency: incident.urgency,
@@ -978,13 +1157,13 @@ export default function IncidentServiceNowPanel({
                    })}
                  >
                     <Link2 size={12} />
-                    <span>Create Child Incident</span>
+                    <span>Create Sub-Incident</span>
                  </button>
                )}
              </div>
           </div>
           {(!incident.childIncidents || incident.childIncidents.length === 0) ? (
-            <SNEmptyRelatedList message="No child incidents found." />
+            <SNEmptyRelatedList message="No sub-incidents found." />
           ) : (
             <table className="sn-list-table">
               <thead>
@@ -1088,6 +1267,128 @@ export default function IncidentServiceNowPanel({
           .print-only.hidden { display: block !important; }
         }
       `}</style>
+
+      {/* Link Related Record Modal */}
+      <SNModal
+        isOpen={showLinkModal}
+        onClose={() => {
+          resetLinkModal();
+          setShowLinkModal(false);
+        }}
+        title="Link Related Record"
+        footer={
+          <>
+            <button
+              className="sn-soft-button"
+              onClick={() => {
+                resetLinkModal();
+                setShowLinkModal(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="sn-primary-button"
+              onClick={handleLinkRecord}
+              disabled={linkProblem.isPending || linkChange.isPending}
+            >
+              {(linkProblem.isPending || linkChange.isPending) ? (
+                <><Loader2 size={14} className="animate-spin inline mr-1" />Linking...</>
+              ) : 'Link Record'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            {(['problem', 'change'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="sn-soft-button"
+                style={linkMode === mode ? { borderColor: sn.link, color: sn.link, background: '#eef2ff' } : undefined}
+                onClick={() => {
+                  setLinkMode(mode);
+                  setLinkSearch('');
+                  setSelectedProblemId('');
+                  setSelectedChangeId('');
+                }}
+              >
+                {mode === 'problem' ? 'Problem' : 'Change'}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <SNLabel>Search</SNLabel>
+            <input
+              className="sn-field"
+              value={linkSearch}
+              onChange={(event) => setLinkSearch(event.target.value)}
+              placeholder={linkMode === 'problem' ? 'Search problems by number or description' : 'Search changes by number or description'}
+            />
+          </div>
+
+          {linkMode === 'problem' ? (
+            <>
+              <div>
+                <SNLabel required>Problem</SNLabel>
+                <select className="sn-field" value={selectedProblemId} onChange={(event) => setSelectedProblemId(event.target.value)}>
+                  <option value="">-- Select problem --</option>
+                  {(problemOptionsQuery.data ?? []).map((problem: any) => (
+                    <option key={problem.id} value={problem.id}>
+                      {problem.number} - {problem.shortDescription || problem.short_description || problem.short_description || 'Untitled problem'}
+                    </option>
+                  ))}
+                </select>
+                {problemOptionsQuery.isLoading && <div className="mt-1 text-xs text-slate-500">Loading problems...</div>}
+              </div>
+              <div>
+                <SNLabel required>Relationship</SNLabel>
+                <select className="sn-field" value={problemLinkType} onChange={(event) => setProblemLinkType(event.target.value)}>
+                  {PROBLEM_LINK_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <SNLabel required>Change</SNLabel>
+                <select className="sn-field" value={selectedChangeId} onChange={(event) => setSelectedChangeId(event.target.value)}>
+                  <option value="">-- Select change --</option>
+                  {(changeOptionsQuery.data ?? []).map((change: any) => (
+                    <option key={change.id} value={change.id}>
+                      {change.number} - {change.shortDescription || change.short_description || 'Untitled change'}
+                    </option>
+                  ))}
+                </select>
+                {changeOptionsQuery.isLoading && <div className="mt-1 text-xs text-slate-500">Loading changes...</div>}
+              </div>
+              <div>
+                <SNLabel required>Relationship</SNLabel>
+                <select className="sn-field" value={changeLinkType} onChange={(event) => setChangeLinkType(event.target.value)}>
+                  {CHANGE_LINK_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+
+          <div>
+            <SNLabel>Notes</SNLabel>
+            <textarea
+              className="sn-field"
+              rows={3}
+              value={linkNotes}
+              onChange={(event) => setLinkNotes(event.target.value)}
+              placeholder="Optional relationship notes"
+            />
+          </div>
+
+          <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+            Linking is for traceability only. Assignment group and assigned engineer remain independent on each record.
+          </div>
+        </div>
+      </SNModal>
 
       {/* Resolution Modal */}
       <SNModal
@@ -1263,7 +1564,7 @@ export default function IncidentServiceNowPanel({
       <SNModal
         isOpen={showBulkModal}
         onClose={() => setShowBulkModal(false)}
-        title="Bulk Operations on Child Incidents"
+        title="Bulk Operations on Sub-Incidents"
         footer={
           <>
             <button className="sn-soft-button" onClick={() => setShowBulkModal(false)}>Cancel</button>
@@ -1283,7 +1584,7 @@ export default function IncidentServiceNowPanel({
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Selected {selectedChildren.length} of {incident.childIncidents?.length} child incidents
+            Selected {selectedChildren.length} of {incident.childIncidents?.length} sub-incidents
           </p>
           
           <div>

@@ -70,7 +70,7 @@ export default function IncidentBreadcrumb({ incident }: IncidentBreadcrumbProps
       
       {incident.childIncidents && incident.childIncidents.length > 0 && (
         <div className="flex items-center ml-2 px-2 py-1 bg-blue-100 rounded text-xs text-blue-800">
-          <span>{incident.childIncidents.length} child incident{incident.childIncidents.length !== 1 ? 's' : ''}</span>
+          <span>{incident.childIncidents.length} sub-incident{incident.childIncidents.length !== 1 ? 's' : ''}</span>
         </div>
       )}
     </nav>

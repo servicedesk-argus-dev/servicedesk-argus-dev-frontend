@@ -45,6 +45,12 @@ const PROBLEM_STATE_LABELS: Record<string, string> = {
   CLOSED: 'Closed',
 };
 
+const INCIDENT_PROBLEM_RELATIONSHIP_LABELS: Record<string, string> = {
+  RELATED: 'Related incident',
+  CAUSED_BY: 'Problem caused incident',
+  SYMPTOM_OF: 'Incident is symptom',
+};
+
 function formatPersonName(value: unknown): string {
   return assignmentPersonLabel(value);
 }
@@ -127,7 +133,9 @@ export default function ProblemServiceNowPanel({
   });
   const allTeams = (teamsData?.data || []) as AssignmentRosterTeam[];
   const teams = orderedAssignmentTeams(allTeams);
-  const assignableUsers = assignableUsersForTeam(teams, assignmentGroupId, problem.assignedTo);
+  const assignableUsers = assignableUsersForTeam(teams, assignmentGroupId, {
+    currentAssigned: problem.assignedTo as any,
+  });
 
   const stateOptions = Object.keys(PROBLEM_STATE_LABELS);
   const linkedIncidents = Array.isArray(problem.linkedIncidents) ? problem.linkedIncidents : [];
@@ -418,7 +426,7 @@ export default function ProblemServiceNowPanel({
                 {linkedIncidents.map((item: any, index: number) => (
                   <tr key={item.id || index}>
                     <td>{item.incident?.number || item.number || '-'}</td>
-                    <td>{item.linkType || 'Related'}</td>
+                    <td>{INCIDENT_PROBLEM_RELATIONSHIP_LABELS[item.linkType] || item.linkType || 'Related incident'}</td>
                     <td>{item.incident?.state || item.state || '-'}</td>
                     <td>{item.incident?.shortDescription || item.shortDescription || '-'}</td>
                   </tr>
