@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { startKeycloakLogin } from '../../lib/keycloak';
+import { APP_ENVIRONMENT, APP_VERSION } from '../../lib/version';
 import {
   type AuthErrorMessage,
   authErrorFromMessage,
@@ -500,7 +501,7 @@ export default function LoginPage() {
 
           {/* Version footer */}
           <p className="text-center text-[10px] mt-6 font-mono" style={{ color: '#94a3b8' }}>
-            ArgusService Desk &middot; FinSpot Technology Solutions Private Limited &middot; No.55B, First Main, Electronic City Phase – 1, Bengaluru – 560 100 &middot; 9176772077
+            ArgusService Desk {APP_VERSION} &middot; {APP_ENVIRONMENT.toUpperCase()} &middot; FinSpot Technology Solutions Private Limited
           </p>
         </div>
       </div>

@@ -42,6 +42,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { APP_VERSION } from '../../lib/version';
 import OrgSwitcher from './OrgSwitcher';
 
 interface SidebarProps {
@@ -293,6 +294,12 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         </nav>
 
         <div className="shrink-0 border-t p-2" style={{ borderColor: '#c6ccd5', background: '#fff' }}>
+          {showLabels && (
+            <div className="mb-2 px-2 text-[10px] font-mono uppercase tracking-[0.08em]" style={{ color: '#98a2b3' }}>
+              Argus {APP_VERSION}
+            </div>
+          )}
+
           {user && showLabels && (
             <button
               type="button"

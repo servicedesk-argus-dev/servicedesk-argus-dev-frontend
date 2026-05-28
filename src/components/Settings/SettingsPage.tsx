@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import { useQuery } from '@tanstack/react-query';
 import {
   User, Bell, Shield, Palette, Database, Save, Loader2, Settings,
   Building2, Globe, Clock, Mail, Phone, Key, Lock, CheckCircle,
@@ -10,6 +11,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../hooks/useAuth';
 import { useUpdateProfile, useChangePassword } from '../../hooks/useAuth';
 import { useOrganizations, useCreateOrganization, useUpdateOrganization } from '../../hooks/useOrganizations';
+import api from '../../lib/api';
+import { APP_ENVIRONMENT, APP_VERSION, BUILD_COMMIT, BUILD_TIME, shortCommit } from '../../lib/version';
 
 const TIMEZONES = [
   'Asia/Kolkata', 'UTC', 'America/New_York', 'America/Chicago',
@@ -68,6 +71,18 @@ export default function SettingsPage() {
   const grad = user ? avatarGrad(user.id) : avatarGradients[0];
   const { canManage } = useAuth();
   const isAdmin = canManage('settings');
+  const { data: platformStatus } = useQuery({
+    queryKey: ['platform-status'],
+    queryFn: async () => {
+      const { data } = await api.get('/status/');
+      return data?.data ?? data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const backendVersion = platformStatus?.appVersion || platformStatus?.version || '-';
+  const backendCommit = platformStatus?.buildCommit || '-';
+  const backendBuildTime = platformStatus?.buildTime || '-';
+  const backendEnvironment = platformStatus?.environment || '-';
 
   // ── Profile state ──
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
@@ -619,14 +634,16 @@ export default function SettingsPage() {
               <Section title="Platform Information" description="Argus Service Desk system details and version info">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { icon: Eye,      label: 'Platform',     value: 'Argus Service Desk' },
-                    { icon: Globe,    label: 'API',          value: '/api/v1' },
-                    { icon: Database, label: 'Database',     value: 'PostgreSQL 16.2' },
-                    { icon: Database, label: 'Cache',        value: 'Redis 7.2' },
-                    { icon: Shield,   label: 'AI Backend',   value: 'Ollama (Qwen3-32B)' },
-                    { icon: Mail,     label: 'Voice',        value: 'XTTS v2 + Whisper' },
-                    { icon: Globe,    label: 'Runtime',      value: 'Node.js v20.20.0' },
-                    { icon: Monitor,  label: 'Environment',  value: 'Production' },
+                    { icon: Eye,      label: 'Platform',        value: 'Argus Service Desk' },
+                    { icon: Globe,    label: 'Frontend Version', value: APP_VERSION },
+                    { icon: Server,   label: 'Backend Version',  value: backendVersion },
+                    { icon: Monitor,  label: 'Environment',      value: `${APP_ENVIRONMENT} / ${backendEnvironment}` },
+                    { icon: Database, label: 'Frontend Commit',  value: shortCommit(BUILD_COMMIT) },
+                    { icon: Database, label: 'Backend Commit',   value: shortCommit(backendCommit) },
+                    { icon: Clock,    label: 'Frontend Build',   value: BUILD_TIME },
+                    { icon: Clock,    label: 'Backend Build',    value: backendBuildTime },
+                    { icon: Globe,    label: 'API',             value: '/api/v1' },
+                    { icon: Shield,   label: 'Release Policy',  value: 'SemVer + Git tag' },
                   ].map(item => {
                     const Icon = item.icon;
                     return (
