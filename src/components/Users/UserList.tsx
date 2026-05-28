@@ -30,16 +30,40 @@ function extractList(payload: any): any[] {
 
 function formatApiError(error: any): string {
   const payload = error?.response?.data;
-  const detail = payload?.errors ?? payload?.detail ?? payload?.message;
-  if (!detail) return 'Failed to create account. Please check the form and try again.';
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) return detail.join(', ');
-  if (typeof detail === 'object') {
-    return Object.entries(detail)
-      .map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join(', ') : String(value)}`)
-      .join(' | ');
+  const detail = payload?.errors ?? payload?.detail ?? payload?.message ?? payload;
+  const fieldLabels: Record<string, string> = {
+    email: 'Email',
+    username: 'Username',
+    password: 'Temporary password',
+    organization_id: 'Client company',
+    organization: 'Client company',
+    team_ids: 'Engineer teams',
+    role_name: 'Role',
+    non_field_errors: 'Account',
+  };
+
+  const formatValue = (value: any): string => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map(formatValue).filter(Boolean).join(', ');
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([field, nestedValue]) => {
+          const label = fieldLabels[field] ?? field.replace(/_/g, ' ');
+          const text = formatValue(nestedValue);
+          return text ? `${label}: ${text}` : '';
+        })
+        .filter(Boolean)
+        .join(' | ');
+    }
+    return String(value);
+  };
+
+  const text = formatValue(detail);
+  if (text) {
+    return text;
   }
-  return String(detail);
+  return 'Failed to create account. Please check the form and try again.';
 }
 
 function displayName(user: any) {
@@ -167,7 +191,13 @@ export default function UserList() {
 
   const selectedRoleNeedsClient = ['Client User', 'Viewer'].includes(form.role_name);
   const selectedRoleCanJoinTeams = form.role_name === 'Engineer';
-  const canCreateAccount = !createUser.isPending && form.password.trim().length >= 8 && (!selectedRoleCanJoinTeams || form.team_ids.length > 0);
+  const hasRequiredClient = !selectedRoleNeedsClient || Boolean(form.organization_id);
+  const hasRequiredTeams = !selectedRoleCanJoinTeams || form.team_ids.length > 0;
+  const canCreateAccount = !createUser.isPending
+    && form.email.trim().length > 0
+    && form.password.trim().length >= 8
+    && hasRequiredClient
+    && hasRequiredTeams;
 
   return (
     <div className="min-h-full space-y-5 bg-slate-50 p-6">
@@ -183,6 +213,18 @@ export default function UserList() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
+            if (!form.email.trim()) {
+              toast.error('Enter the account email address.');
+              return;
+            }
+            if (form.password.trim().length < 8) {
+              toast.error('Temporary password must be at least 8 characters.');
+              return;
+            }
+            if (selectedRoleNeedsClient && !form.organization_id) {
+              toast.error('Select the client company for this client login. Create the client in Clients first if it is not listed.');
+              return;
+            }
             if (selectedRoleCanJoinTeams && form.team_ids.length === 0) {
               toast.error('Select at least one team for the engineer.');
               return;
