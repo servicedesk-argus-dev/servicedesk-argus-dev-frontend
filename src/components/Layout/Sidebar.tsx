@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { APP_VERSION } from '../../lib/version';
+import { isSuperAdminUser } from '../../utils/access';
 import OrgSwitcher from './OrgSwitcher';
 
 interface SidebarProps {
@@ -137,14 +138,14 @@ const navGroups: NavGroup[] = [
     icon: Settings,
     items: [
       { to: '/teams', icon: Users, label: 'Teams', roles: LEAD_ROLES },
-      { to: '/clients', icon: Building2, label: 'Clients', roles: LEAD_ROLES },
+      { to: '/clients', icon: Building2, label: 'Clients', roles: ['ADMIN'] },
       { to: '/users', icon: Shield, label: 'Users', roles: LEAD_ROLES },
-      { to: '/roles', icon: Lock, label: 'Roles & Permissions', roles: ['ADMIN'] },
-      { to: '/integrations', icon: Plug, label: 'Integrations', roles: ['ADMIN'] },
-      { to: '/settings/sites', icon: MapPin, label: 'Sites', superAdminOnly: true },
+      { to: '/roles', icon: Lock, label: 'Roles & Permissions', superAdminOnly: true },
+      { to: '/integrations', icon: Plug, label: 'Integrations', superAdminOnly: true },
+      { to: '/settings/sites', icon: MapPin, label: 'Sites', roles: MANAGER_ROLES },
       { to: '/audit', icon: ScrollText, label: 'Audit Log', roles: MANAGER_ROLES },
       { to: '/profile', icon: UserCircle, label: 'Profile' },
-      { to: '/settings', icon: Settings, label: 'Settings' },
+      { to: '/settings', icon: Settings, label: 'Settings', superAdminOnly: true },
     ],
   },
 ];
@@ -159,7 +160,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const userRole = user?.role || 'VIEWER';
-  const isSuperAdmin = userRole === 'ADMIN' && !user?.organization;
+  const isSuperAdmin = isSuperAdminUser(user);
   const firstName = user?.first_name || user?.firstName || '';
   const lastName = user?.last_name || user?.lastName || '';
   const initials = user

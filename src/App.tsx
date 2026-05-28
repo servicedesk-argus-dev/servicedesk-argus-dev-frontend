@@ -133,11 +133,19 @@ export default function App() {
         <Route path="/escalation" element={<Suspense fallback={<LoadingFallback />}><EscalationPolicyBuilder /></Suspense>} />
         <Route path="/escalations" element={<Suspense fallback={<LoadingFallback />}><EscalationPolicyBuilder /></Suspense>} />
         <Route path="/maintenance" element={<Suspense fallback={<LoadingFallback />}><MaintenanceWindowScheduler /></Suspense>} />
-        <Route path="/noc" element={<Suspense fallback={<LoadingFallback />}><NOCView /></Suspense>} />
+        <Route path="/noc" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><NOCView /></Suspense>
+          </ProtectedRoute>
+        } />
         <Route path="/alerts" element={<Suspense fallback={<LoadingFallback />}><AlertList /></Suspense>} />
         <Route path="/alerts/:id" element={<Suspense fallback={<LoadingFallback />}><AlertDetail /></Suspense>} />
         <Route path="/network" element={<Suspense fallback={<LoadingFallback />}><NetworkTopology /></Suspense>} />
-        <Route path="/metrics" element={<Suspense fallback={<LoadingFallback />}><MetricsDashboard /></Suspense>} />
+        <Route path="/metrics" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><MetricsDashboard /></Suspense>
+          </ProtectedRoute>
+        } />
         <Route path="/ai-insights" element={<Suspense fallback={<LoadingFallback />}><AIInsightsDashboard /></Suspense>} />
         <Route path="/aiops" element={<Suspense fallback={<LoadingFallback />}><AIInsightsDashboard /></Suspense>} />
         <Route path="/automation" element={<Suspense fallback={<LoadingFallback />}><AutomationDashboard /></Suspense>} />
@@ -148,7 +156,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/roles" element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
+          <ProtectedRoute allowedRoles={['ADMIN']} requireSuperAdmin>
             <Suspense fallback={<LoadingFallback />}><RoleManagement /></Suspense>
           </ProtectedRoute>
         } />
@@ -156,29 +164,49 @@ export default function App() {
           <Suspense fallback={<LoadingFallback />}><ApprovalCenter /></Suspense>
         } />
         <Route path="/integrations" element={
-          <ProtectedRoute allowedRoles={['ADMIN']}>
+          <ProtectedRoute allowedRoles={['ADMIN']} requireSuperAdmin>
             <Suspense fallback={<LoadingFallback />}><IntegrationHub /></Suspense>
           </ProtectedRoute>
         } />
         <Route path="/teams" element={<Suspense fallback={<LoadingFallback />}><TeamList /></Suspense>} />
         <Route path="/clients" element={
-          <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER', 'OPERATOR']}>
+          <ProtectedRoute allowedRoles={['ADMIN']}>
             <Suspense fallback={<LoadingFallback />}><ClientManagement /></Suspense>
           </ProtectedRoute>
         } />
         <Route path="/reports" element={<Suspense fallback={<LoadingFallback />}><ReportsDashboard /></Suspense>} />
         <Route path="/sms" element={<Suspense fallback={<LoadingFallback />}><SMSDashboard /></Suspense>} />
         <Route path="/voice" element={<Suspense fallback={<LoadingFallback />}><VoiceDashboard /></Suspense>} />
-        <Route path="/k8s" element={<Suspense fallback={<LoadingFallback />}><K8sClusterDashboard /></Suspense>} />
-        <Route path="/logs" element={<Suspense fallback={<LoadingFallback />}><LogExplorer /></Suspense>} />
+        <Route path="/k8s" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><K8sClusterDashboard /></Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/logs" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><LogExplorer /></Suspense>
+          </ProtectedRoute>
+        } />
         <Route path="/pagerduty" element={<Suspense fallback={<LoadingFallback />}><PagerDutyDashboard /></Suspense>} />
-        <Route path="/apm" element={<Suspense fallback={<LoadingFallback />}><APMDashboard /></Suspense>} />
+        <Route path="/apm" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><APMDashboard /></Suspense>
+          </ProtectedRoute>
+        } />
         <Route path="/bod-eod" element={<Suspense fallback={<LoadingFallback />}><BODEODDashboard /></Suspense>} />
         <Route path="/domain" element={<Suspense fallback={<LoadingFallback />}><DomainDashboard /></Suspense>} />
         <Route path="/eod" element={<Suspense fallback={<LoadingFallback />}><EODDashboard /></Suspense>} />
         <Route path="/oms" element={<Suspense fallback={<LoadingFallback />}><OMSDashboard /></Suspense>} />
-        <Route path="/ill-bandwidth" element={<Suspense fallback={<LoadingFallback />}><ILLBandwidthDashboard /></Suspense>} />
-        <Route path="/settings" element={<Suspense fallback={<LoadingFallback />}><SettingsPage /></Suspense>} />
+        <Route path="/ill-bandwidth" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><ILLBandwidthDashboard /></Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute requireSuperAdmin>
+            <Suspense fallback={<LoadingFallback />}><SettingsPage /></Suspense>
+          </ProtectedRoute>
+        } />
         <Route path="/settings/mfa" element={<Suspense fallback={<LoadingFallback />}><MFASetup /></Suspense>} />
         <Route path="/settings/sites" element={<Suspense fallback={<LoadingFallback />}><SiteManagement /></Suspense>} />
         <Route path="/knowledge-base" element={<Suspense fallback={<LoadingFallback />}><KnowledgeBasePage /></Suspense>} />

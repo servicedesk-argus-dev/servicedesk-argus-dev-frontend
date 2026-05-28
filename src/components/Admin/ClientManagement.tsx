@@ -21,8 +21,33 @@ function extractList(payload: any): ClientOrg[] {
   return [];
 }
 
-function slugFromName(name: string) {
-  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function formatApiError(error: any): string {
+  const payload = error?.response?.data;
+  const detail = payload?.errors ?? payload?.detail ?? payload?.message ?? payload;
+  const fieldLabels: Record<string, string> = {
+    name: 'Client company name',
+    slug: 'Client slug',
+    non_field_errors: 'Client',
+  };
+
+  const formatValue = (value: any): string => {
+    if (value == null) return '';
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.map(formatValue).filter(Boolean).join(', ');
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([field, nestedValue]) => {
+          const label = fieldLabels[field] ?? field.replace(/_/g, ' ');
+          const text = formatValue(nestedValue);
+          return text ? `${label}: ${text}` : '';
+        })
+        .filter(Boolean)
+        .join(' | ');
+    }
+    return String(value);
+  };
+
+  return formatValue(detail) || 'Failed to create client';
 }
 
 export default function ClientManagement() {
@@ -44,7 +69,6 @@ export default function ClientManagement() {
       const clientName = name.trim();
       const { data } = await api.post('/organizations/', {
         name: clientName,
-        slug: slugFromName(clientName),
         is_active: true,
       });
       return data;
@@ -55,7 +79,7 @@ export default function ClientManagement() {
       toast.success('Client created');
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.detail || error?.response?.data?.message || 'Failed to create client');
+      toast.error(formatApiError(error));
     },
   });
 
@@ -68,7 +92,7 @@ export default function ClientManagement() {
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
       toast.success('Client updated');
     },
-    onError: () => toast.error('Failed to update client'),
+    onError: (error: any) => toast.error(formatApiError(error) || 'Failed to update client'),
   });
 
   const clients = useMemo(() => {

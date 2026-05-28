@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, Component, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie } from 'recharts';
 import {
   AlertTriangle, Zap, CheckCircle2, Clock, Eye, Brain,
   Server, Database, Shield, Globe, HardDrive, Container, Cpu, Network,
@@ -181,6 +181,11 @@ function formatDateTime(date: string | undefined): string {
   const parsed = new Date(date);
   if (!Number.isFinite(parsed.getTime())) return 'N/A';
   return parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function toCount(value: unknown): number {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 const P_COLORS: Record<string, { bg: string; text: string; border: string; stripe: string; label: string }> = {
@@ -419,9 +424,28 @@ export default function DashboardOverview() {
   /* ── Trend ── */
   const trendChart = useMemo(() => {
     const raw = trendData?.data;
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return null;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((row: any) => {
+        const date = safeStr(row.date || row.day || row.createdAt);
+        const created = toCount(row.created ?? row.count ?? row.incidents);
+        const resolved = toCount(row.resolved ?? row.closed);
+        const parsed = date ? new Date(date) : null;
+        return {
+          date,
+          label: parsed && Number.isFinite(parsed.getTime())
+            ? parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+            : date,
+          created,
+          resolved,
+        };
+      })
+      .filter((row) => row.date);
   }, [trendData]);
+  const trendCreatedTotal = trendChart.reduce((sum, row) => sum + row.created, 0);
+  const trendResolvedTotal = trendChart.reduce((sum, row) => sum + row.resolved, 0);
+  const trendPeak = Math.max(0, ...trendChart.map((row) => row.created + row.resolved));
+  const trendHasActivity = trendCreatedTotal + trendResolvedTotal > 0;
   const [trendChartRef, trendChartSize] = useChartSize(150);
 
   /* ── Changes / Problems / Teams / OnCall ── */
@@ -747,24 +771,49 @@ export default function DashboardOverview() {
                 ))}
               </div>
             }>
-            {trendChart && trendChart.length > 0 ? (
-              <div ref={trendChartRef} className="h-[150px] w-full min-w-0 overflow-hidden">
-                {trendChartSize.width > 0 ? (
-                  <BarChart width={trendChartSize.width} height={trendChartSize.height} data={trendChart} margin={{ top: 4, right: 4, bottom: 0, left: -24 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => { try { return new Date(String(v)).toLocaleDateString('en-IN', { weekday: 'short' }); } catch { return String(v); } }} />
-                    <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                      labelFormatter={(v) => { try { return new Date(String(v)).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }); } catch { return String(v); } }} />
-                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={20}>
-                      {trendChart.map((_: any, idx: number) => (
-                        <Cell key={idx} fill={idx === trendChart.length - 1 ? '#4F46E5' : '#C7D2FE'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
+            {trendChart.length > 0 ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Created', value: trendCreatedTotal, color: '#4F46E5' },
+                    { label: 'Resolved', value: trendResolvedTotal, color: '#059669' },
+                    { label: 'Peak Day', value: trendPeak, color: '#D97706' },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-lg border border-slate-100 bg-slate-50 px-2 py-2">
+                      <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{item.label}</div>
+                      <div className="mt-1 font-mono text-base font-bold leading-none" style={{ color: item.color }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {trendHasActivity ? (
+                  <div ref={trendChartRef} className="h-[150px] w-full min-w-0 overflow-hidden">
+                    {trendChartSize.width > 0 ? (
+                      <BarChart width={trendChartSize.width} height={trendChartSize.height} data={trendChart} margin={{ top: 4, right: 4, bottom: 0, left: -18 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 9, fill: '#94A3B8' }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
+                        <Tooltip
+                          cursor={{ fill: '#F8FAFC' }}
+                          contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          labelFormatter={(_, payload) => {
+                            const date = payload?.[0]?.payload?.date;
+                            try { return new Date(String(date)).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return String(date); }
+                          }}
+                        />
+                        <Bar dataKey="created" name="Created" fill="#4F46E5" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                        <Bar dataKey="resolved" name="Resolved" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={18} />
+                      </BarChart>
+                    ) : (
+                      <div className="h-full w-full" />
+                    )}
+                  </div>
                 ) : (
-                  <div className="h-full w-full" />
+                  <div className="flex h-[150px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/70 text-center">
+                    <TrendingUp size={22} className="mb-2 text-slate-300" />
+                    <p className="text-xs font-medium text-slate-500">No incident activity in the last {trendDays} days</p>
+                    <p className="mt-1 text-[10px] text-slate-400">Try 14d or 30d to view older incidents.</p>
+                  </div>
                 )}
               </div>
             ) : (

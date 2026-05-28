@@ -1,9 +1,11 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { isSuperAdminUser } from '../../utils/access';
 
 interface Props {
   children: React.ReactNode;
   allowedRoles?: string[];
+  requireSuperAdmin?: boolean;
 }
 
 const CLIENT_ALLOWED_PREFIXES = [
@@ -27,7 +29,7 @@ function clientCanOpen(pathname: string) {
   return CLIENT_ALLOWED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export default function ProtectedRoute({ children, allowedRoles }: Props) {
+export default function ProtectedRoute({ children, allowedRoles, requireSuperAdmin }: Props) {
   const { isAuthenticated, user, isLoading, hasHydrated } = useAuthStore();
   const location = useLocation();
 
@@ -52,6 +54,17 @@ export default function ProtectedRoute({ children, allowedRoles }: Props) {
 
   if (user?.role === 'CLIENT' && !clientCanOpen(location.pathname)) {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  if (requireSuperAdmin && !isSuperAdminUser(user)) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[400px]">
+        <div className="text-center">
+          <h2 className="text-xl font-display font-bold text-stone-900 mb-2">Access Denied</h2>
+          <p className="text-sm text-stone-400">Only a Super Admin can open this page.</p>
+        </div>
+      </div>
+    );
   }
 
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {

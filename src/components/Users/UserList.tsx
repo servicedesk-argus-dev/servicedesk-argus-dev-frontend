@@ -7,9 +7,17 @@ import api from '../../lib/api';
 
 const ROLE_OPTIONS = [
   { value: 'Super Admin', label: 'Super Admin' },
+  { value: 'Org Admin', label: 'Admin' },
   { value: 'Engineer', label: 'Engineer' },
   { value: 'Client User', label: 'Client' },
 ];
+
+const ROLE_HELP: Record<string, string> = {
+  'Super Admin': 'Global platform owner: can manage all clients, admins, users, roles, settings, and every ticket.',
+  'Org Admin': 'Internal service-desk admin: can manage clients, users, teams, queues, and ticket assignment, but cannot create Super Admin accounts.',
+  Engineer: 'Internal resolver: works assigned incidents, problems, changes, and service requests.',
+  'Client User': 'Client login: scoped to one client company and can only see that company data.',
+};
 
 interface AccountForm {
   email: string;
@@ -72,6 +80,12 @@ function displayName(user: any) {
 
 function primaryRole(user: any) {
   return user.roleNames?.[0] ?? user.role_names?.[0] ?? user.role ?? 'User';
+}
+
+function displayRole(user: any) {
+  const role = primaryRole(user);
+  if (role === 'Org Admin') return 'Admin';
+  return role;
 }
 
 function generateTemporaryPassword() {
@@ -331,6 +345,9 @@ export default function UserList() {
               {' '}first, then select that company here.
             </div>
           )}
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 lg:col-span-6">
+            {ROLE_HELP[form.role_name] ?? 'Choose the access level for this account.'}
+          </div>
           <button type="submit" disabled={!canCreateAccount} className="inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 lg:col-span-6">
             {createUser.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
             Create Account
@@ -377,7 +394,7 @@ export default function UserList() {
                       <div className="font-semibold text-slate-900">{displayName(user)}</div>
                       <div className="text-xs text-slate-500">{user.email || '-'}</div>
                     </td>
-                    <td className="px-4 py-3">{primaryRole(user)}</td>
+                    <td className="px-4 py-3">{displayRole(user)}</td>
                     <td className="px-4 py-3 text-slate-500">
                       {Array.isArray(user.teamMemberships) && user.teamMemberships.length > 0
                         ? user.teamMemberships.map((membership: any) => membership.team?.name).filter(Boolean).join(', ')

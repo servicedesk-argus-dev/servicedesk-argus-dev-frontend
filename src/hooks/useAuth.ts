@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
+import { isSuperAdminUser } from '../utils/access';
 
 type ManageResource =
   | 'incidents'
@@ -69,7 +70,9 @@ export function useAuth() {
     return requiredPermissions.some((code) => permissionMatches(normalizedPermissions, code));
   }
 
+  const isSuperAdmin = isSuperAdminUser(store.user);
   const isAdmin =
+    isSuperAdmin ||
     hasNormalizedRole('Super Admin', 'Org Admin') ||
     hasPermission('*:*', 'settings:manage', 'user:manage');
   const isManager =
@@ -112,6 +115,7 @@ export function useAuth() {
     ...store,
     roles,
     permissions,
+    isSuperAdmin,
     isAdmin,
     isManager,
     isEngineer,
