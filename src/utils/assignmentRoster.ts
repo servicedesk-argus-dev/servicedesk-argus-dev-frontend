@@ -21,7 +21,11 @@ export type AssignmentRosterUser = {
   organization?: { id?: string | null; name?: string } | null;
 };
 
-export type AssignmentRosterMember = { user?: AssignmentRosterUser | null } | AssignmentRosterUser;
+export type AssignmentRosterMember = {
+  user?: AssignmentRosterUser | null;
+  isAssignable?: boolean;
+  is_assignable?: boolean;
+} | AssignmentRosterUser;
 
 export type AssignmentRosterTeam = {
   id: string;
@@ -74,6 +78,11 @@ function memberUser(member: AssignmentRosterMember): AssignmentRosterUser | null
   return member as AssignmentRosterUser;
 }
 
+function isAssignableMember(member: AssignmentRosterMember): boolean {
+  if (!member || !('user' in member)) return true;
+  return member.isAssignable !== false && member.is_assignable !== false;
+}
+
 function userOrganizationId(user: AssignmentRosterUser): string | null {
   return user.organizationId || user.organization_id || user.organization?.id || null;
 }
@@ -99,12 +108,14 @@ export function assignableUsersForTeam(
   const usersById = new Map<string, AssignmentRosterUser>();
 
   (selectedTeam?.members || [])
+    .filter(isAssignableMember)
     .map(memberUser)
     .filter(Boolean)
     .filter((user) => isActiveUser(user as AssignmentRosterUser) && isResolverUser(user as AssignmentRosterUser))
     .forEach((user) => {
       const candidate = user as AssignmentRosterUser;
-      if (organizationId && userOrganizationId(candidate) !== organizationId) {
+      const candidateOrganizationId = userOrganizationId(candidate);
+      if (organizationId && candidateOrganizationId && candidateOrganizationId !== organizationId) {
         return;
       }
       if (!candidate.id || usersById.has(candidate.id)) {

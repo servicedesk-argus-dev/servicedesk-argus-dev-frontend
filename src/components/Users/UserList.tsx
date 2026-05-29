@@ -13,8 +13,8 @@ const ROLE_OPTIONS = [
 ];
 
 const ROLE_HELP: Record<string, string> = {
-  'Super Admin': 'Global platform owner: can manage all clients, admins, users, roles, settings, and every ticket.',
-  'Org Admin': 'Internal service-desk admin: can manage clients, users, teams, queues, and ticket assignment, but cannot create Super Admin accounts.',
+  'Super Admin': 'Global platform owner. Can also receive ticket assignments when added to resolver teams.',
+  'Org Admin': 'Internal service-desk admin. Add resolver teams when this admin also works Infra, DevOps, or Software tickets.',
   Engineer: 'Internal resolver: works assigned incidents, problems, changes, and service requests.',
   'Client User': 'Client login: scoped to one client company and can only see that company data.',
 };
@@ -45,7 +45,7 @@ function formatApiError(error: any): string {
     password: 'Temporary password',
     organization_id: 'Client company',
     organization: 'Client company',
-    team_ids: 'Engineer teams',
+    team_ids: 'Resolver teams',
     role_name: 'Role',
     non_field_errors: 'Account',
   };
@@ -93,6 +93,14 @@ function generateTemporaryPassword() {
   const random = new Uint32Array(14);
   window.crypto.getRandomValues(random);
   return Array.from(random, (value) => alphabet[value % alphabet.length]).join('');
+}
+
+function roleCanJoinResolverTeams(roleName: string) {
+  return ['Super Admin', 'Org Admin', 'Engineer'].includes(roleName);
+}
+
+function roleRequiresResolverTeam(roleName: string) {
+  return roleName === 'Engineer';
 }
 
 const initialForm: AccountForm = {
@@ -204,9 +212,10 @@ export default function UserList() {
   }, [usersQuery.data, search]);
 
   const selectedRoleNeedsClient = ['Client User', 'Viewer'].includes(form.role_name);
-  const selectedRoleCanJoinTeams = form.role_name === 'Engineer';
+  const selectedRoleCanJoinTeams = roleCanJoinResolverTeams(form.role_name);
+  const selectedRoleRequiresTeams = roleRequiresResolverTeam(form.role_name);
   const hasRequiredClient = !selectedRoleNeedsClient || Boolean(form.organization_id);
-  const hasRequiredTeams = !selectedRoleCanJoinTeams || form.team_ids.length > 0;
+  const hasRequiredTeams = !selectedRoleRequiresTeams || form.team_ids.length > 0;
   const canCreateAccount = !createUser.isPending
     && form.email.trim().length > 0
     && form.password.trim().length >= 8
@@ -239,7 +248,7 @@ export default function UserList() {
               toast.error('Select the client company for this client login. Create the client in Clients first if it is not listed.');
               return;
             }
-            if (selectedRoleCanJoinTeams && form.team_ids.length === 0) {
+            if (selectedRoleRequiresTeams && form.team_ids.length === 0) {
               toast.error('Select at least one team for the engineer.');
               return;
             }
@@ -259,7 +268,7 @@ export default function UserList() {
                 ...form,
                 role_name: roleName,
                 organization_id: roleName === 'Client User' ? form.organization_id : '',
-                team_ids: roleName === 'Engineer' ? form.team_ids : [],
+                team_ids: roleCanJoinResolverTeams(roleName) ? form.team_ids : [],
               });
             }}
           >
@@ -295,8 +304,12 @@ export default function UserList() {
             <div className="rounded-md border bg-slate-50 p-3 lg:col-span-4" style={{ borderColor: '#d8dde6' }}>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Engineer teams</div>
-                  <div className="text-xs text-slate-500">Choose where this engineer can receive assigned work.</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Resolver teams {selectedRoleRequiresTeams ? <span className="text-red-500">*</span> : <span className="font-normal text-slate-400">(optional)</span>}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    Users in these teams appear in incident, problem, and change assignment lists.
+                  </div>
                 </div>
                 <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold text-slate-500">
                   {form.team_ids.length} selected
