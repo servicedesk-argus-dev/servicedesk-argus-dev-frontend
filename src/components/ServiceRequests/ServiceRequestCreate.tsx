@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -20,6 +20,9 @@ import {
 
 type FormValues = {
   catalogItemId: string;
+  catalogItemName: string;
+  category: string;
+  estimatedDelivery: string;
   shortDescription: string;
   description: string;
   priority: Priority;
@@ -90,7 +93,7 @@ export default function ServiceRequestCreate() {
   const [selectedItemId, setSelectedItemId] = useState(preselectedItemId);
   const [variables, setVariables] = useState<Record<string, string>>({});
 
-  const { data: itemsRes, isLoading: itemsLoading } = useCatalogItems({ limit: 200 });
+  const { data: itemsRes } = useCatalogItems({ limit: 200 });
   const { data: itemRes } = useCatalogItem(selectedItemId);
 
   const catalogItems: CatalogItem[] = itemsRes?.data ?? [];
@@ -107,6 +110,9 @@ export default function ServiceRequestCreate() {
   } = useForm<FormValues>({
     defaultValues: {
       catalogItemId: preselectedItemId,
+      catalogItemName: '',
+      category: '',
+      estimatedDelivery: '',
       shortDescription: '',
       description: '',
       priority: 'P3',
@@ -115,15 +121,40 @@ export default function ServiceRequestCreate() {
   });
 
   const priority = watch('priority');
+  const catalogItemName = watch('catalogItemName');
+
+  useEffect(() => {
+    if (!selectedItem || !selectedItemId) return;
+    setValue('catalogItemName', selectedItem.name);
+    setValue('category', selectedItem.category?.name || selectedItem.type || '');
+    setValue('estimatedDelivery', selectedItem.estimatedDays ? `${selectedItem.estimatedDays} day(s)` : '');
+  }, [selectedItem?.id, selectedItemId, setValue]);
+
+  const syncCatalogItemText = (value: string) => {
+    const trimmed = value.trim().toLowerCase();
+    const exactMatch = catalogItems.find((item) => item.name.trim().toLowerCase() === trimmed);
+    if (!exactMatch) {
+      setSelectedItemId('');
+      setValue('catalogItemId', '');
+      return;
+    }
+
+    setSelectedItemId(exactMatch.id);
+    setValue('catalogItemId', exactMatch.id);
+    setValue('category', exactMatch.category?.name || exactMatch.type || '');
+    setValue('estimatedDelivery', exactMatch.estimatedDays ? `${exactMatch.estimatedDays} day(s)` : '');
+    setVariables({});
+  };
 
   const updateVariable = (name: string, value: string) => {
     setVariables((current) => ({ ...current, [name]: value }));
   };
 
   const onSubmit = async (values: FormValues) => {
-    const catalogItemId = selectedItemId || values.catalogItemId;
-    if (!catalogItemId) {
-      toast.error('Select a catalog item');
+    const catalogItemId = selectedItemId || values.catalogItemId || undefined;
+    const typedCatalogItemName = values.catalogItemName?.trim();
+    if (!typedCatalogItemName) {
+      toast.error('Enter a catalog item');
       return;
     }
 
@@ -139,9 +170,12 @@ export default function ServiceRequestCreate() {
     try {
       const response = await createRequest.mutateAsync({
         catalogItemId,
+        catalogItemName: typedCatalogItemName,
+        category: values.category?.trim() || undefined,
+        estimatedDelivery: values.estimatedDelivery?.trim() || undefined,
         quantity: Number(values.quantity || 1),
         priority: values.priority,
-        shortDescription: values.shortDescription || selectedItem?.name || 'Service request',
+        shortDescription: values.shortDescription || typedCatalogItemName || 'Service request',
         description: values.description,
         notes: values.description,
         variables,
@@ -189,25 +223,27 @@ export default function ServiceRequestCreate() {
             </SNRecordField>
 
             <SNRecordField label="Catalog Item" required>
-              <select
+              <input
                 className="sn-field"
-                style={errors.catalogItemId ? { borderColor: sn.critical } : undefined}
-                {...register('catalogItemId', { required: 'Catalog item is required' })}
-                value={selectedItemId}
+                list="service-request-catalog-items"
+                placeholder="Type catalog item"
+                style={errors.catalogItemName ? { borderColor: sn.critical } : undefined}
+                {...register('catalogItemName', { required: 'Catalog item is required' })}
+                value={catalogItemName || ''}
                 onChange={(event) => {
-                  setSelectedItemId(event.target.value);
-                  setValue('catalogItemId', event.target.value);
-                  setVariables({});
+                  setValue('catalogItemName', event.target.value, { shouldDirty: true, shouldValidate: true });
+                  syncCatalogItemText(event.target.value);
                 }}
-              >
-                <option value="">-- Select item --</option>
+              />
+              <input type="hidden" {...register('catalogItemId')} />
+              <datalist id="service-request-catalog-items">
                 {catalogItems.map((item) => (
-                  <option key={item.id} value={item.id}>{item.name}</option>
+                  <option key={item.id} value={item.name} />
                 ))}
-              </select>
+              </datalist>
             </SNRecordField>
             <SNRecordField label="Category">
-              <SNReadOnly>{selectedItem?.category?.name || selectedItem?.type || '-- None --'}</SNReadOnly>
+              <input className="sn-field" placeholder="Type category" {...register('category')} />
             </SNRecordField>
             <SNRecordField label="Quantity">
               <input className="sn-field" type="number" min="1" max="99" {...register('quantity')} />
@@ -224,7 +260,7 @@ export default function ServiceRequestCreate() {
               <SNReadOnly>{selectedItem?.approvalRequired ? 'Required' : 'Not required'}</SNReadOnly>
             </SNRecordField>
             <SNRecordField label="Estimated Delivery">
-              <SNReadOnly>{selectedItem?.estimatedDays ? `${selectedItem.estimatedDays} day(s)` : '-- None --'}</SNReadOnly>
+              <input className="sn-field" placeholder="Example: 2 day(s)" {...register('estimatedDelivery')} />
             </SNRecordField>
             <SNRecordField label="Short Description" required>
               <input
@@ -290,7 +326,7 @@ export default function ServiceRequestCreate() {
         </SNCollapsibleSection>
 
         <div className="flex justify-end border-x border-b px-6 py-4" style={{ borderColor: sn.border, background: '#fff' }}>
-          <button type="submit" className="sn-primary-button inline-flex items-center gap-2" disabled={createRequest.isPending || itemsLoading}>
+          <button type="submit" className="sn-primary-button inline-flex items-center gap-2" disabled={createRequest.isPending}>
             {createRequest.isPending ? <Loader2 size={16} className="animate-spin" /> : null}
             Submit
           </button>

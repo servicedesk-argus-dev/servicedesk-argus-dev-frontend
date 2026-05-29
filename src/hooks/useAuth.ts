@@ -73,7 +73,8 @@ export function useAuth() {
   const isSuperAdmin = isSuperAdminUser(store.user);
   const isAdmin =
     isSuperAdmin ||
-    hasNormalizedRole('Super Admin', 'Org Admin') ||
+    store.user?.role === 'ADMIN' ||
+    hasNormalizedRole('Admin', 'Super Admin', 'Org Admin') ||
     hasPermission('*:*', 'settings:manage', 'user:manage');
   const isManager =
     isAdmin ||
@@ -87,6 +88,12 @@ export function useAuth() {
     store.user?.role === 'CLIENT' ||
     hasNormalizedRole('Client User') ||
     (hasPermission('service_request:create', 'incident:create') && !isEngineer && !isManager);
+  const hasAssignmentControllerRole =
+    isAdmin ||
+    hasNormalizedRole('Manager', 'Team Lead', 'NOC') ||
+    hasPermission('team:manage', 'user:manage', 'settings:manage');
+  const isEngineerOnly = hasNormalizedRole('Engineer') && !hasAssignmentControllerRole;
+  const canAssignTickets = !isClient && hasAssignmentControllerRole && !isEngineerOnly;
 
   function hasRole(...targetRoles: string[]): boolean {
     return hasNormalizedRole(...targetRoles);
@@ -103,7 +110,7 @@ export function useAuth() {
       return true;
     }
     if (hasNormalizedRole('Engineer')) {
-      return ['incidents', 'problems', 'kb', 'catalog', 'assets', 'vendors'].includes(resource);
+      return ['incidents', 'problems', 'changes', 'kb', 'catalog', 'assets', 'vendors'].includes(resource);
     }
     if (isClient) {
       return ['incidents', 'problems', 'changes', 'kb', 'catalog'].includes(resource);
@@ -120,6 +127,7 @@ export function useAuth() {
     isManager,
     isEngineer,
     isClient,
+    canAssignTickets,
     hasRole,
     hasPermission,
     canManage,

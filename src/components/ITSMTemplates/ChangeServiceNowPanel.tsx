@@ -98,9 +98,9 @@ export default function ChangeServiceNowPanel({
   onReject?: (comments: string) => void;
 }) {
   const navigate = useNavigate();
-  const { user, isClient, isManager, isAdmin } = useAuth();
+  const { user, isClient, isManager, isAdmin, canAssignTickets } = useAuth();
   const canModify = !isClient && (isManager || isAdmin || Boolean(change.canEdit));
-  const canAssign = !isClient && (isManager || isAdmin);
+  const canAssign = canAssignTickets;
 
   const [shortDescription, setShortDescription] = useState(change.shortDescription || '');
   const [description, setDescription] = useState(change.description || '');

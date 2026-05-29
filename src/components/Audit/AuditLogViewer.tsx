@@ -17,6 +17,11 @@ interface AuditLog {
   status?: string;
   ipAddress?: string;
   userAgent?: string;
+  actorEmail?: string;
+  method?: string;
+  path?: string;
+  statusCode?: number;
+  correlationId?: string;
   changes?: any;
   newData?: any;
   createdAt: string;
@@ -364,7 +369,7 @@ export default function AuditLogViewer() {
                       ) : (
                         <div className="flex items-center gap-1.5">
                           <User className="w-3.5 h-3.5" style={{ color: '#94a3b8' }} />
-                          <span className="text-[11px]" style={{ color: '#94a3b8' }}>System</span>
+                          <span className="text-[11px]" style={{ color: '#94a3b8' }}>{entry.actorEmail || 'System'}</span>
                         </div>
                       )}
                     </div>
@@ -374,6 +379,11 @@ export default function AuditLogViewer() {
                       <p className="text-[11px] font-mono font-medium truncate" style={{ color: '#0f172a' }} title={entry.action}>
                         {entry.action}
                       </p>
+                      {entry.method || entry.path ? (
+                        <p className="text-[9px] font-mono truncate" style={{ color: '#94a3b8' }} title={`${entry.method || ''} ${entry.path || ''}`.trim()}>
+                          {[entry.method, entry.path].filter(Boolean).join(' ')}
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* Resource */}
@@ -396,7 +406,7 @@ export default function AuditLogViewer() {
                       {entry.status ? (
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded-md uppercase"
                           style={{ background: statStyle.bg, color: statStyle.text }}>
-                          {entry.status}
+                          {entry.statusCode ? `${entry.status} ${entry.statusCode}` : entry.status}
                         </span>
                       ) : (
                         <span className="text-[10px]" style={{ color: '#94a3b8' }}>--</span>
@@ -430,6 +440,10 @@ export default function AuditLogViewer() {
                     <div className="px-4 pb-4" style={{ borderBottom: idx < logs.length - 1 ? '1px solid rgba(220,38,38,0.06)' : 'none' }}>
                       <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.02)', border: '1px solid rgba(220,38,38,0.08)' }}>
                         <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#64748b' }}>Changes / Details</p>
+                        <div className="mb-3 grid gap-2 text-[10px] font-mono md:grid-cols-2" style={{ color: '#64748b' }}>
+                          <span>Path: {entry.path || '--'}</span>
+                          <span>Correlation: {entry.correlationId || '--'}</span>
+                        </div>
                         <pre className="text-[11px] font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[300px] overflow-y-auto"
                           style={{ color: '#0f172a' }}>
                           {JSON.stringify(entry.changes || entry.newData, null, 2)}

@@ -49,6 +49,7 @@ const FIELD_TO_SNAKE: Record<string, string> = {
   riskLevel: 'risk_level',
   assignedToId: 'assigned_to',
   assignmentGroupId: 'assignment_group',
+  organizationId: 'organization_id',
   implementationPlan: 'implementation_plan',
   rollbackPlan: 'rollback_plan',
   testPlan: 'test_plan',

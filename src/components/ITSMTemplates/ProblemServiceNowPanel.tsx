@@ -86,9 +86,9 @@ export default function ProblemServiceNowPanel({
   };
 }) {
   const navigate = useNavigate();
-  const { isClient, isManager, isAdmin } = useAuth();
+  const { isClient, isManager, isAdmin, canAssignTickets } = useAuth();
   const canModify = !isClient && (isManager || isAdmin || Boolean(problem.canEdit));
-  const canAssign = !isClient && (isManager || isAdmin);
+  const canAssign = canAssignTickets;
 
   const aiRCA = useAiRCA();
   const addWorkNote = useAddProblemWorkNote(problem?.id || '');

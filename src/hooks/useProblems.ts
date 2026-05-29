@@ -37,6 +37,7 @@ const FIELD_TO_SNAKE: Record<string, string> = {
   assignedToId: 'assigned_to',
   assignmentGroupId: 'assignment_group',
   relatedChangeId: 'related_change',
+  organizationId: 'organization_id',
   rootCause: 'root_cause',
   rootCauseAnalysis: 'root_cause_analysis',
   permanentFix: 'permanent_fix',

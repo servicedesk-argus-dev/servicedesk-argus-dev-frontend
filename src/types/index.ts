@@ -667,6 +667,9 @@ export interface ServiceRequest {
   description: string | null;
   state: ServiceRequestState;
   priority: Priority;
+  catalogItemName?: string | null;
+  category?: string | null;
+  estimatedDelivery?: string | null;
   requestedById: string;
   assignedToId: string | null;
   assignmentGroupId: string | null;

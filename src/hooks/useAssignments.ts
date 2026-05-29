@@ -35,14 +35,15 @@ export const useCategoryGroupMappings = () => {
 };
 
 export const useAssignmentPreview = (fields: any, enabled = true) => {
+  const hasOrganization = Boolean(fields?.organizationId || fields?.organization_id);
   return useQuery({
     queryKey: ['assignment-preview', fields],
     queryFn: async () => {
-      if (!fields.category) return null;
+      if (!fields.category || !hasOrganization) return null;
       const { data } = await api.post('/assignments/preview/', fields);
       return data;
     },
-    enabled: enabled && !!fields.category,
+    enabled: enabled && !!fields.category && hasOrganization,
   });
 };
 

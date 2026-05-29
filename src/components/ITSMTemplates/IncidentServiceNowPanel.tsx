@@ -211,13 +211,13 @@ export default function IncidentServiceNowPanel({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isManager, isAdmin, isClient } = useAuth();
+  const { isManager, isAdmin, isClient, canAssignTickets } = useAuth();
   const canEditIncident = !isClient && (isManager || isAdmin || Boolean(incident.canEdit));
   const canResolve = canEditIncident;
   const canClose = isManager || isAdmin;
   const canEscalate = canEditIncident;
   const canPromote = canEditIncident;
-  const canAssign = !isClient && (isManager || isAdmin);
+  const canAssign = canAssignTickets;
   const canReopen = canResolve || isClient;
 
   const resolveIncident = useResolveIncident();
@@ -384,6 +384,10 @@ export default function IncidentServiceNowPanel({
   }
 
   async function handleAssignmentUpdate() {
+    if (!canAssign) {
+      toast.error('Only admins, managers, team leads, and NOC can change assignment');
+      return;
+    }
     if (!isAssignmentChanged) {
       toast('No assignment changes to save');
       return;
@@ -820,35 +824,39 @@ export default function IncidentServiceNowPanel({
               </select>
             </SNFormRow>
             <SNFormRow label="Assignment group">
-              <select
-                className="sn-field"
-                value={assignmentGroupId}
-                onChange={(e) => {
-                  setAssignmentGroupId(e.target.value);
-                  setAssignedToId('');
-                }}
-                disabled={!canAssign || teamsQuery.isLoading}
-              >
-                <option value="">-- None --</option>
-                {assignmentTeams.map((team) => (
-                  <option key={team.id} value={team.id}>{team.name}</option>
-                ))}
-              </select>
-            </SNFormRow>
-            <SNFormRow label="Assigned to">
-              <div className="flex gap-2">
+              {canAssign ? (
                 <select
                   className="sn-field"
-                  value={assignedToId}
-                  onChange={(e) => setAssignedToId(e.target.value)}
-                  disabled={!canAssign || !assignmentGroupId}
+                  value={assignmentGroupId}
+                  onChange={(e) => {
+                    setAssignmentGroupId(e.target.value);
+                    setAssignedToId('');
+                  }}
+                  disabled={teamsQuery.isLoading}
                 >
                   <option value="">-- None --</option>
-                  {assignableUsers.map((user) => (
-                    <option key={user.id} value={user.id} disabled={Boolean(user.disabled)}>{assignmentPersonLabel(user)}</option>
+                  {assignmentTeams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
                   ))}
                 </select>
-                {canAssign && (
+              ) : (
+                <SNReadOnly>{assignmentPersonLabel(incident.assignmentGroup)}</SNReadOnly>
+              )}
+            </SNFormRow>
+            <SNFormRow label="Assigned to">
+              {canAssign ? (
+                <div className="flex gap-2">
+                  <select
+                    className="sn-field"
+                    value={assignedToId}
+                    onChange={(e) => setAssignedToId(e.target.value)}
+                    disabled={!assignmentGroupId}
+                  >
+                    <option value="">-- None --</option>
+                    {assignableUsers.map((user) => (
+                      <option key={user.id} value={user.id} disabled={Boolean(user.disabled)}>{assignmentPersonLabel(user)}</option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     className="sn-soft-button min-w-[86px]"
@@ -857,8 +865,10 @@ export default function IncidentServiceNowPanel({
                   >
                     {assignmentSaving ? <Loader2 size={14} className="animate-spin" /> : 'Assign'}
                   </button>
-                )}
-              </div>
+                </div>
+              ) : (
+                <SNReadOnly>{formatPersonName(incident.assignedTo)}</SNReadOnly>
+              )}
             </SNFormRow>
 
             <SNFormRow label="State">

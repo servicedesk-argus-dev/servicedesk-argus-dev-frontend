@@ -34,6 +34,7 @@ interface ChangeFormData {
   type: ChangeType;
   riskLevel: RiskLevel;
   category: string;
+  organizationId: string;
   subcategory: string;
   assignmentGroupId: string;
   assignedToId: string;
@@ -97,33 +98,28 @@ function toIso(value: string): string | undefined {
 export default function ChangeCreate() {
   const navigate = useNavigate();
   const createChange = useCreateChange();
-  const { user: currentUser, isClient } = useAuth();
+  const { user: currentUser, isClient, canAssignTickets } = useAuth();
 
-  const { data: teamsData } = useQuery({
-    queryKey: ['teams', 'change-create-assignment', currentUser?.organizationId || 'all'],
-    queryFn: async () => {
-      const params = new URLSearchParams({ limit: '200', is_active: 'true' });
-      if (currentUser?.organizationId) params.set('organization', currentUser.organizationId);
-      const { data } = await api.get(`/teams/?${params}`);
-      return data;
-    },
+  const { data: organizationsData } = useQuery({
+    queryKey: ['organizations'],
+    queryFn: async () => { const { data } = await api.get('/organizations/'); return data; },
     staleTime: 60000,
-    enabled: !isClient,
+    enabled: Boolean(currentUser),
   });
-  const { data: assetsData } = useQuery({
-    queryKey: ['assets', 'change-create', currentUser?.organizationId || 'all'],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (currentUser?.organizationId) params.set('organization', currentUser.organizationId);
-      const { data } = await api.get(`/assets/${params.toString() ? `?${params}` : ''}`);
-      return data;
-    },
-    staleTime: 60000,
-    enabled: !isClient,
-  });
-
-  const teams = orderedAssignmentTeams((teamsData?.data || []) as AssignmentRosterTeam[]);
-  const configItems: { id: string; name: string; hostname?: string; type: string }[] = assetsData?.data || [];
+  const organizationsFromApi: { id: string; name: string; is_active?: boolean }[] = Array.isArray(organizationsData)
+    ? organizationsData
+    : organizationsData?.data || [];
+  const activeOrganizations = organizationsFromApi.filter((organization) => organization.is_active !== false);
+  const currentOrganization =
+    currentUser?.organization && typeof currentUser.organization === 'object' && currentUser.organization.id
+      ? { id: currentUser.organization.id, name: currentUser.organization.name || 'Current client' }
+      : null;
+  const organizations = activeOrganizations.length > 0
+    ? activeOrganizations
+    : currentOrganization
+      ? [currentOrganization]
+      : [];
+  const defaultOrganizationId = organizations[0]?.id || '';
 
   const {
     register,
@@ -138,6 +134,7 @@ export default function ChangeCreate() {
       type: 'NORMAL',
       riskLevel: 'LOW',
       category: '',
+      organizationId: currentUser?.organizationId || '',
       subcategory: '',
       assignmentGroupId: '',
       assignedToId: '',
@@ -157,20 +154,68 @@ export default function ChangeCreate() {
     if (currentUser?.id) {
       setValue('openedById', currentUser.id);
     }
-  }, [currentUser, setValue]);
+    if (currentUser?.organizationId) {
+      setValue('organizationId', currentUser.organizationId);
+    }
+  }, [currentUser?.id, currentUser?.organizationId, setValue]);
 
   const changeType = watch('type');
   const riskLevel = watch('riskLevel');
   const category = watch('category');
   const subcategory = watch('subcategory');
+  const selectedOrganizationId = watch('organizationId') || currentUser?.organizationId || '';
   const assignmentGroupId = watch('assignmentGroupId');
-  const teamMembers = assignableUsersForTeam(teams, assignmentGroupId, {
-    organizationId: currentUser?.organizationId || null,
+
+  useEffect(() => {
+    if (!isClient && !selectedOrganizationId && defaultOrganizationId) {
+      setValue('organizationId', defaultOrganizationId, { shouldValidate: true });
+    }
+  }, [defaultOrganizationId, isClient, selectedOrganizationId, setValue]);
+
+  const { data: teamsData } = useQuery({
+    queryKey: ['teams', 'change-create-assignment', selectedOrganizationId],
+    queryFn: async () => {
+      const params = new URLSearchParams({ limit: '200', is_active: 'true' });
+      if (selectedOrganizationId) params.set('organization', selectedOrganizationId);
+      const { data } = await api.get(`/teams/?${params}`);
+      return data;
+    },
+    staleTime: 60000,
+    enabled: Boolean(currentUser) && canAssignTickets && Boolean(selectedOrganizationId),
+  });
+  const { data: assetsData } = useQuery({
+    queryKey: ['assets', 'change-create', selectedOrganizationId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (selectedOrganizationId) params.set('organization', selectedOrganizationId);
+      const { data } = await api.get(`/assets/${params.toString() ? `?${params}` : ''}`);
+      return data;
+    },
+    staleTime: 60000,
+    enabled: Boolean(currentUser) && !isClient && Boolean(selectedOrganizationId),
   });
 
-  const { data: suggestion } = useAssignmentPreview({ category }, !isClient);
+  const teams = orderedAssignmentTeams((teamsData?.data || []) as AssignmentRosterTeam[]);
+  const configItems: { id: string; name: string; hostname?: string; type: string }[] = selectedOrganizationId ? (assetsData?.data || []) : [];
+  const teamMembers = assignableUsersForTeam(teams, assignmentGroupId, {
+    organizationId: selectedOrganizationId || null,
+  });
+
+  useEffect(() => {
+    if (!canAssignTickets) {
+      setValue('assignmentGroupId', '');
+      setValue('assignedToId', '');
+    }
+  }, [canAssignTickets, setValue]);
+
+  const { data: suggestion } = useAssignmentPreview({
+    category,
+    subcategory,
+    organizationId: selectedOrganizationId || undefined,
+  }, canAssignTickets && Boolean(selectedOrganizationId));
 
   const applySuggestion = () => {
+    if (!canAssignTickets) return;
     if (suggestion?.suggested_group) {
       setValue('assignmentGroupId', suggestion.suggested_group.id);
     }
@@ -180,10 +225,15 @@ export default function ChangeCreate() {
   };
 
   useEffect(() => {
+    if (!canAssignTickets) {
+      setValue('assignmentGroupId', '');
+      setValue('assignedToId', '');
+      return;
+    }
     if (suggestion?.suggested_group) {
       applySuggestion();
     }
-  }, [suggestion]);
+  }, [canAssignTickets, suggestion]);
 
   // Filter configuration items based on selected subcategory
   const filteredConfigItems = configItems.filter((ci: any) => {
@@ -192,12 +242,18 @@ export default function ChangeCreate() {
   });
 
   const onSubmit = async (data: any) => {
+    if (!data.organizationId) {
+      toast.error('Select a client before creating the change.');
+      return;
+    }
+
     const payload: Record<string, unknown> = {
       ...data,
       requested_by: data.openedById,
       state: 'NEW',
-      assignment_group: isClient ? undefined : data.assignmentGroupId || undefined,
-      assigned_to: isClient ? undefined : data.assignedToId || undefined,
+      organizationId: data.organizationId || undefined,
+      assignment_group: canAssignTickets ? data.assignmentGroupId || undefined : undefined,
+      assigned_to: canAssignTickets ? data.assignedToId || undefined : undefined,
       config_item: isClient ? undefined : data.configItemId || undefined,
       subcategory: isClient ? undefined : data.subcategory || undefined,
       planned_start_date: toIso(data.plannedStartDate),
@@ -244,6 +300,19 @@ export default function ChangeCreate() {
               <SNReadOnly>{personLabel(currentUser)}</SNReadOnly>
               <input type="hidden" {...register('openedById')} />
             </SNRecordField>
+            <SNRecordField label="Client" required>
+              <select className="sn-field" {...register('organizationId', { required: 'Client is required' })}>
+                <option value="">-- Select client --</option>
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>{organization.name}</option>
+                ))}
+              </select>
+              {!selectedOrganizationId && (
+                <div className="text-[10px] text-gray-400 mt-1">
+                  Select a client to load resolver teams and configuration items.
+                </div>
+              )}
+            </SNRecordField>
             <SNRecordField label="Change Type">
               <select className="sn-field" {...register('type')}>
                 {CHANGE_TYPES.map((type) => <option key={type} value={type}>{labelize(type)}</option>)}
@@ -274,7 +343,7 @@ export default function ChangeCreate() {
 
             {!isClient && (
               <SNRecordField label="Configuration Item">
-                <select className="sn-field" {...register('configItemId')}>
+                <select className="sn-field" {...register('configItemId')} disabled={!selectedOrganizationId}>
                   <option value="">-- None --</option>
                   {filteredConfigItems.map((ci) => (
                     <option key={ci.id} value={ci.id}>{ci.hostname || ci.name}</option>
@@ -288,10 +357,11 @@ export default function ChangeCreate() {
               </SNRecordField>
             )}
 
-            {!isClient && (
+            {canAssignTickets && (
               <SNRecordField label="Assignment Group">
                 <select
                   className="sn-field"
+                  disabled={!selectedOrganizationId}
                   {...register('assignmentGroupId', {
                     onChange: () => setValue('assignedToId', ''),
                   })}
@@ -299,18 +369,20 @@ export default function ChangeCreate() {
                   <option value="">-- None --</option>
                   {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
                 </select>
+                {!selectedOrganizationId && <div className="text-[10px] text-gray-400 mt-1">Select client first</div>}
               </SNRecordField>
             )}
 
-            {!isClient && (
+            {canAssignTickets && (
               <SNRecordField label="Performed by">
-                <select className="sn-field" {...register('assignedToId')} disabled={!assignmentGroupId}>
+                <select className="sn-field" {...register('assignedToId')} disabled={!selectedOrganizationId || !assignmentGroupId}>
                   <option value="">-- None --</option>
                   {teamMembers.map((user: any) => (
                     <option key={user.id} value={user.id} disabled={Boolean(user.disabled)}>{personLabel(user)}</option>
                   ))}
                 </select>
-                {!assignmentGroupId && <div className="text-[10px] text-gray-400 mt-1">Select group to filter members</div>}
+                {!selectedOrganizationId && <div className="text-[10px] text-gray-400 mt-1">Select client first</div>}
+                {selectedOrganizationId && !assignmentGroupId && <div className="text-[10px] text-gray-400 mt-1">Select group to filter members</div>}
               </SNRecordField>
             )}
 

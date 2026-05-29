@@ -116,7 +116,7 @@ export default function IncidentCreate() {
   const navigate = useNavigate();
   const location = useLocation();
   const createIncident = useCreateIncident();
-  const { user: currentUser, isClient } = useAuth();
+  const { user: currentUser, isClient, canAssignTickets } = useAuth();
 
   const { data: organizationsData } = useQuery({
     queryKey: ['organizations'],
@@ -125,18 +125,20 @@ export default function IncidentCreate() {
     enabled: Boolean(currentUser),
   });
 
-  const organizationsFromApi: { id: string; name: string }[] = Array.isArray(organizationsData)
+  const organizationsFromApi: { id: string; name: string; is_active?: boolean }[] = Array.isArray(organizationsData)
     ? organizationsData
     : organizationsData?.data || [];
+  const activeOrganizations = organizationsFromApi.filter((organization) => organization.is_active !== false);
   const currentOrganization =
     currentUser?.organization && typeof currentUser.organization === 'object' && currentUser.organization.id
       ? { id: currentUser.organization.id, name: currentUser.organization.name || 'Current client' }
       : null;
-  const organizations = organizationsFromApi.length > 0
-    ? organizationsFromApi
+  const organizations = activeOrganizations.length > 0
+    ? activeOrganizations
     : currentOrganization
       ? [currentOrganization]
       : [];
+  const defaultOrganizationId = organizations[0]?.id || '';
 
   const {
     register,
@@ -190,6 +192,12 @@ export default function IncidentCreate() {
   const configItemId = useWatch({ control, name: 'configItemId' }) ?? '';
   const previousOrganizationId = useRef<string | null>(selectedOrganizationId || null);
 
+  useEffect(() => {
+    if (!isClient && !selectedOrganizationId && defaultOrganizationId) {
+      setValue('organizationId', defaultOrganizationId, { shouldValidate: true });
+    }
+  }, [defaultOrganizationId, isClient, selectedOrganizationId, setValue]);
+
   const { data: assetsData } = useAssets({
     organization: selectedOrganizationId || undefined,
     ...(siteId ? { site: siteId } : {}),
@@ -213,13 +221,20 @@ export default function IncidentCreate() {
       return data;
     },
     staleTime: 60000,
-    enabled: Boolean(currentUser) && !isClient && Boolean(selectedOrganizationId),
+    enabled: Boolean(currentUser) && canAssignTickets && Boolean(selectedOrganizationId),
   });
 
   const teams = orderedAssignmentTeams((teamsData?.data || []) as AssignmentRosterTeam[]);
   const teamMembers = assignableUsersForTeam(teams, assignmentGroupId, {
     organizationId: selectedOrganizationId || null,
   });
+
+  useEffect(() => {
+    if (!canAssignTickets) {
+      setValue('assignmentGroupId', '');
+      setValue('assignedToId', '');
+    }
+  }, [canAssignTickets, setValue]);
 
   useEffect(() => {
     const nextOrganizationId = selectedOrganizationId || null;
@@ -261,23 +276,28 @@ export default function IncidentCreate() {
   const { data: suggestion } = useAssignmentPreview({
     category,
     subcategory,
-    config_item_id: configItemId || undefined
-  }, true);
+    config_item_id: configItemId || undefined,
+    organizationId: selectedOrganizationId || undefined,
+  }, canAssignTickets && Boolean(selectedOrganizationId));
 
   const parentId = useWatch({ control, name: 'parentId' }) ?? '';
 
   const onSubmit = async (data: IncidentFormValues) => {
+    if (!data.organizationId) {
+      toast.error('Select a client before creating the incident.');
+      return;
+    }
     try {
       await createIncident.mutateAsync({
         ...data,
-        assignmentGroupId: isClient ? undefined : data.assignmentGroupId || undefined,
-        assignedToId: isClient ? undefined : data.assignedToId || undefined,
+        assignmentGroupId: canAssignTickets ? data.assignmentGroupId || undefined : undefined,
+        assignedToId: canAssignTickets ? data.assignedToId || undefined : undefined,
         source: data.source,
         requested_by: data.openedById,
         priority,
         state: 'NEW',
-        assignment_group: isClient ? undefined : data.assignmentGroupId || undefined,
-        assigned_to: isClient ? undefined : data.assignedToId || undefined,
+        assignment_group: canAssignTickets ? data.assignmentGroupId || undefined : undefined,
+        assigned_to: canAssignTickets ? data.assignedToId || undefined : undefined,
         config_item: data.configItemId || undefined,
         subcategory: data.subcategory || undefined,
         site: data.siteId || undefined,
@@ -293,26 +313,29 @@ export default function IncidentCreate() {
   };
 
   const applySuggestion = () => {
+    if (!canAssignTickets) return;
     if (suggestion?.suggested_group) {
       setValue('assignmentGroupId', suggestion.suggested_group.id);
     }
-    if (!isClient && suggestion?.suggested_user) {
+    if (suggestion?.suggested_user) {
       setValue('assignedToId', suggestion.suggested_user.id);
     }
   };
 
   // Auto-apply suggestion when category changes
   useEffect(() => {
+    if (!canAssignTickets) {
+      setValue('assignmentGroupId', '');
+      setValue('assignedToId', '');
+      return;
+    }
     if (suggestion?.suggested_group) {
       setValue('assignmentGroupId', suggestion.suggested_group.id);
     }
-    if (!isClient && suggestion?.suggested_user) {
+    if (suggestion?.suggested_user) {
       setValue('assignedToId', suggestion.suggested_user.id);
     }
-    if (isClient) {
-      setValue('assignedToId', '');
-    }
-  }, [isClient, suggestion, setValue]);
+  }, [canAssignTickets, suggestion, setValue]);
 
   return (
     <SNPage className="min-h-full" style={{ margin: '-24px', background: '#fff' }}>
@@ -322,7 +345,7 @@ export default function IncidentCreate() {
         statePill={<SNPillBadge label="NEW" tone="info" />}
         secondaryActions={(
           <div className="flex gap-2">
-            {suggestion?.suggested_group && (
+            {canAssignTickets && suggestion?.suggested_group && (
               <button 
                 type="button" 
                 className="sn-soft-button inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 border-indigo-200"
@@ -351,7 +374,7 @@ export default function IncidentCreate() {
             <input type="hidden" {...register('parentId')} />
           </div>
         )}
-        {suggestion?.suggested_group && (
+        {canAssignTickets && suggestion?.suggested_group && (
           <div className="px-6 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
             <span className="text-xs font-medium text-indigo-700">
               💡 Assignment Engine suggests: <b>{suggestion.suggested_group.name}</b> 
@@ -424,7 +447,7 @@ export default function IncidentCreate() {
               </select>
             </SNRecordField>
             
-            {!isClient && (
+            {canAssignTickets && (
               <SNRecordField label="Assignment Group">
                 <select
                   className="sn-field"
@@ -438,7 +461,7 @@ export default function IncidentCreate() {
                 </select>
               </SNRecordField>
             )}
-            {!isClient && (
+            {canAssignTickets && (
               <SNRecordField label="Assigned To">
                 <select className="sn-field" {...register('assignedToId')} disabled={!selectedOrganizationId || !assignmentGroupId}>
                   <option value="">-- None --</option>

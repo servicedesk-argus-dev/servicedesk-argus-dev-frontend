@@ -465,6 +465,9 @@ function ServiceRequestDetail() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 24 }}>
             <DetailField icon={Hash} label="Number" value={sr.number} />
             <DetailField icon={Tag} label="Short Description" value={sr.shortDescription} />
+            <DetailField icon={Package} label="Catalog Item" value={sr.catalogItemName || sr.requestItems?.[0]?.catalogItem?.name} />
+            <DetailField icon={Layers} label="Category" value={sr.category || sr.requestItems?.[0]?.catalogItem?.category?.name || sr.requestItems?.[0]?.catalogItem?.type} />
+            <DetailField icon={CalendarDays} label="Estimated Delivery" value={sr.estimatedDelivery} />
             <DetailField
               icon={User2}
               label="Requested By"
